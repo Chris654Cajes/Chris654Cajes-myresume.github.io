@@ -143,9 +143,22 @@
         ul { padding-left: 1rem; }
         li { margin-bottom: 0.4rem; }
 
+        /* Updated Mobile Logic */
         @media (max-width: 991px) {
-            #sidebar { display: none; }
-            #content { margin-left: 0; padding: 1rem; }
+            #sidebar { 
+                width: 100%;
+                height: auto;
+                position: relative;
+                border-right: none;
+                border-bottom: 1px solid var(--border);
+            }
+            #content { 
+                margin-left: 0; 
+                padding: 1.5rem 1rem; 
+            }
+            .theme-grid {
+                grid-template-columns: repeat(8, 1fr);
+            }
         }
     </style>
 </head>
