@@ -251,6 +251,15 @@
             page.drawText(contactInfo, { x: margin, y: currentY, size: 9, font: helveticaFont, color: textColor });
             currentY -= lineHeight + 10;
 
+            // ========== LINKEDIN ==========
+            // Draw LinkedIn URL before Professional Summary (from page data)
+            if (resumeData.personalInfo.linkedin) {
+                page.drawText('LinkedIn: ' + resumeData.personalInfo.linkedin, {
+                    x: margin, y: currentY, size: 9, font: helveticaFont, color: textColor
+                });
+                currentY -= lineHeight + 10;
+            }
+
             // ========== PROFESSIONAL SUMMARY ==========
             if (resumeData.summary && resumeData.summary.trim()) {
                 drawSection('PROFESSIONAL SUMMARY');
@@ -560,6 +569,12 @@
                     linkText: linkEl ? linkEl.textContent.trim() : ''
                 };
             }).filter(project => project.title);
+        }
+
+        // Extract LinkedIn URL from the HTML page
+        const linkedinLink = document.querySelector('a[href*="linkedin.com"]');
+        if (linkedinLink) {
+            resumeData.personalInfo.linkedin = linkedinLink.href;
         }
     }
 
