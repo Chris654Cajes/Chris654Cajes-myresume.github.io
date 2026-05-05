@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -348,8 +348,8 @@
                                 <div style="width: 16px; height: 16px; background: #22c55e; border-radius: 50%;"></div>
                             </div>
                             <div style="font-size: 0.7rem; color: var(--accent); margin-bottom: 0.5rem;">CONTACT</div>
-                            <div style="font-size: 0.7rem; color: var(--text-dim); margin-bottom: 0.3rem;">📧 clcajes@gmail.com</div>
-                            <div style="font-size: 0.7rem; color: var(--text-dim); margin-bottom: 0.3rem;">📞 +63 968 581 6796</div>
+                            <div style="font-size: 0.7rem; color: var(--text-dim); margin-bottom: 0.3rem;">ðŸ“§ clcajes@gmail.com</div>
+                            <div style="font-size: 0.7rem; color: var(--text-dim); margin-bottom: 0.3rem;">ðŸ“ž +63 968 581 6796</div>
                         </div>
                         <div style="flex: 1; background: var(--bg-body); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; overflow: hidden;">
                             <div style="font-size: 0.7rem; color: var(--accent); margin-bottom: 0.5rem;">PROFESSIONAL SUMMARY</div>
@@ -667,5 +667,33 @@ Dark Mode: Easy on the eyes, perfect for low-light environments
             });
         });
     </script>
+<!-- Protection against inspect element, view source, and right click -->
+<script>
+    document.addEventListener('contextmenu', function(e) {
+        e.preventDefault();
+    }, false);
+    
+    document.addEventListener('keydown', function(e) {
+        // Block F12
+        if (e.keyCode === 123) {
+            e.preventDefault();
+            return false;
+        }
+        // Block Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+Shift+C
+        if (e.ctrlKey && e.shiftKey && (e.keyCode === 73 || e.keyCode === 74 || e.keyCode === 67)) {
+            e.preventDefault();
+            return false;
+        }
+        // Block Ctrl+U (View Page Source)
+        if (e.ctrlKey && e.keyCode === 85) {
+            e.preventDefault();
+            return false;
+        }
+    }, false);
+    
+    // Block right click specifically
+    document.oncontextmenu = new Function("return false");
+</script>
 </body>
 </html>
+

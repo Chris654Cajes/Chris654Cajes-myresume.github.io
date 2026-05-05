@@ -1,4 +1,4 @@
-        <div class="mb-4">
+﻿        <div class="mb-4">
             <a href="Resume - Christopher Lee Cajes.pdf" download class="contact-pill text-center fw-bold" style="background: var(--accent); color: #fff; border: none;">
                 <i class="fas fa-file-pdf me-2"></i>Download Resume (PDF)
             </a>
@@ -95,7 +95,7 @@
             <div class="exp-item">
                 <div class="d-flex justify-content-between flex-wrap">
                     <h6 class="fw-bold mb-0">Systems Analyst II | Rizal Commercial Banking Corporation (RCBC)</h6>
-                    <span class="small text-accent">Nov 2025 – Feb 2026</span>
+                    <span class="small text-accent">Nov 2025 â€“ Feb 2026</span>
                 </div>
                 <p class="small text-dim mb-2">Taguig City</p>
                 <ul class="small">
@@ -108,7 +108,7 @@
             <div class="exp-item">
                 <div class="d-flex justify-content-between flex-wrap">
                     <h6 class="fw-bold mb-0">Programmer / Analyst | Vertere Global Solutions Inc.</h6>
-                    <span class="small text-accent">Apr 2025 – Oct 2025</span>
+                    <span class="small text-accent">Apr 2025 â€“ Oct 2025</span>
                 </div>
                 <p class="small text-dim mb-2">Taguig City</p>
                 <ul class="small">
@@ -121,7 +121,7 @@
             <div class="exp-item">
                 <div class="d-flex justify-content-between flex-wrap">
                     <h6 class="fw-bold mb-0">Full Stack Web Developer | Quantrics Enterprises Inc.</h6>
-                    <span class="small text-accent">Nov 2023 – Feb 2025</span>
+                    <span class="small text-accent">Nov 2023 â€“ Feb 2025</span>
                 </div>
                 <p class="small text-dim mb-2">Taytay, Rizal</p>
                 <ul class="small">
@@ -133,7 +133,7 @@
             <div class="exp-item">
                 <div class="d-flex justify-content-between flex-wrap">
                     <h6 class="fw-bold mb-0">Web Developer | Quantrics Enterprises Inc.</h6>
-                    <span class="small text-accent">Dec 2021 – Oct 2023</span>
+                    <span class="small text-accent">Dec 2021 â€“ Oct 2023</span>
                 </div>
                 <p class="small text-dim mb-2">Taytay, Rizal</p>
                 <ul class="small">
@@ -145,7 +145,7 @@
             <div class="exp-item">
                 <div class="d-flex justify-content-between flex-wrap">
                     <h6 class="fw-bold mb-0">Application Developer | Quantrics Enterprises Inc.</h6>
-                    <span class="small text-accent">Nov 2018 – Nov 2021</span>
+                    <span class="small text-accent">Nov 2018 â€“ Nov 2021</span>
                 </div>
                 <p class="small text-dim mb-2">Taytay, Rizal</p>
                 <ul class="small">
@@ -158,7 +158,7 @@
             <div class="exp-item">
                 <div class="d-flex justify-content-between flex-wrap">
                     <h6 class="fw-bold mb-0">Software Developer | Capital Power Global, Ltd.</h6>
-                    <span class="small text-accent">May 2017 – Aug 2018</span>
+                    <span class="small text-accent">May 2017 â€“ Aug 2018</span>
                 </div>
                 <p class="small text-dim mb-2">Makati City</p>
                 <ul class="small">
@@ -332,4 +332,32 @@
                 }
             });
         </script>
-    </body>
+    <!-- Protection against inspect element, view source, and right click -->
+<script>
+    document.addEventListener('contextmenu', function(e) {
+        e.preventDefault();
+    }, false);
+    
+    document.addEventListener('keydown', function(e) {
+        // Block F12
+        if (e.keyCode === 123) {
+            e.preventDefault();
+            return false;
+        }
+        // Block Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+Shift+C
+        if (e.ctrlKey && e.shiftKey && (e.keyCode === 73 || e.keyCode === 74 || e.keyCode === 67)) {
+            e.preventDefault();
+            return false;
+        }
+        // Block Ctrl+U (View Page Source)
+        if (e.ctrlKey && e.keyCode === 85) {
+            e.preventDefault();
+            return false;
+        }
+    }, false);
+    
+    // Block right click specifically
+    document.oncontextmenu = new Function("return false");
+</script>
+</body>
+
