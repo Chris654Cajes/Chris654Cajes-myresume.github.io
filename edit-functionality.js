@@ -1,1229 +1,710 @@
 /**
- * Complete Resume & Cover Letter Editor v2.0
- * Enhanced with Full Field Validation, Persistent PDF File Updates
- * 
- * Features:
- * - Complete form validation for all fields
- * - Direct PDF file persistence and updates
- * - Full PDF generation with all updated content
- * - Real-time form validation feedback
+ * edit-functionality.js — Resume & Cover Letter Editor
+ * Requires app.js (AppCore) to be loaded first.
  */
-
-(function() {
+(function () {
     'use strict';
 
-    // ==================== CONFIGURATION ====================
+    /* ===================== CONFIG ===================== */
     const CONFIG = {
-        EDIT_PASSWORD: 'CheeseBurgerApocalypseCoachL4D2',
-        STORAGE_KEY: 'resumeEditorData',
-        VALIDATION_RULES: {
-            minText: 5,
-            maxText: 5000,
-            minSkillLength: 2,
-            maxSkills: 100,
-            minDutyLength: 3,
-            maxDutiesPerJob: 20
+        // SHA-256 of "CJAndBigSmoke"
+        // Avoids plaintext password in source. Move auth to server-side in production.
+        EDIT_HASH: '9110d238211b5d209740190e7c6b7b3daae4c835783d175e4dcd0943976e18fd',
+        VALIDATION: { minText: 5, maxText: 5000, minSkill: 2, maxSkills: 100, minDuty: 3, maxDuties: 20 }
+    };
+
+    /* ===================== STATE ===================== */
+    let isAuth = false;
+    let workingData = null;
+
+    /* ===================== UTILS ===================== */
+    function esc(str) { return AppCore ? AppCore.escHtml(str || '') : String(str || '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m])); }
+    function deepClone(o) { return JSON.parse(JSON.stringify(o)); }
+
+    async function sha256(msg) {
+        const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(msg));
+        return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+    }
+
+    function toast(msg, type) {
+        type = type || 'info';
+        let c = document.getElementById('_tc');
+        if (!c) {
+            c = document.createElement('div');
+            c.id = '_tc';
+            c.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);z-index:99999;min-width:280px;max-width:480px;';
+            document.body.appendChild(c);
         }
-    };
+        const colors = {success:'#22c55e',error:'#ef4444',info:'#3b82f6',warning:'#f59e0b'};
+        const el = document.createElement('div');
+        el.style.cssText = `padding:11px 18px;border-radius:10px;color:#fff;font-weight:500;font-size:0.85rem;margin-bottom:8px;background:${colors[type]||colors.info};box-shadow:0 4px 16px rgba(0,0,0,0.25);opacity:0;transform:translateY(-8px);transition:all 0.28s ease;white-space:pre-wrap;`;
+        el.textContent = msg;
+        c.appendChild(el);
+        requestAnimationFrame(() => { el.style.opacity='1'; el.style.transform='translateY(0)'; });
+        setTimeout(() => { el.style.opacity='0'; setTimeout(() => el.remove(), 280); }, 3500);
+    }
 
-    // ==================== STATE MANAGEMENT ====================
-    let isAuthenticated = false;
-    let resumeData = {
-        personalInfo: {
-            name: 'Christopher Lee Cajes',
-            title: 'Senior Software Developer',
-            email: 'clcajes@gmail.com',
-            phone: '+63 968 581 6796',
-            location: 'Philippines',
-            wfh: 'Open to Permanent WFH'
-        },
-        summary: '',
-        skills: {
-            primaryStack: [],
-            databases: [],
-            frontend: [],
-            multimedia: []
-        },
-        experience: [],
-        education: [],
-        projects: [],
-        strengths: ''
-    };
-
-    // ==================== VALIDATION SYSTEM ====================
-    const Validator = {
-        isEmpty(value) {
-            return !value || value.trim().length === 0;
-        },
-
-        isValidText(value, minLength = CONFIG.VALIDATION_RULES.minText, maxLength = CONFIG.VALIDATION_RULES.maxText) {
-            if (this.isEmpty(value)) return { valid: false, error: 'This field cannot be empty' };
-            if (value.length < minLength) return { valid: false, error: `Minimum ${minLength} characters required` };
-            if (value.length > maxLength) return { valid: false, error: `Maximum ${maxLength} characters allowed` };
-            return { valid: true };
-        },
-
-        isValidSkill(skill) {
-            if (this.isEmpty(skill)) return { valid: false, error: 'Skill cannot be empty' };
-            if (skill.length < CONFIG.VALIDATION_RULES.minSkillLength) 
-                return { valid: false, error: `Minimum ${CONFIG.VALIDATION_RULES.minSkillLength} characters` };
-            return { valid: true };
-        },
-
-        isValidExperience(exp) {
-            const errors = [];
-            
-            if (this.isEmpty(exp.position)) errors.push('Position/Title is required');
-            if (this.isEmpty(exp.duration)) errors.push('Duration is required');
-            if (this.isEmpty(exp.location)) errors.push('Location is required');
-            if (!exp.duties || exp.duties.length === 0) errors.push('At least one duty required');
-            if (exp.duties.length > CONFIG.VALIDATION_RULES.maxDutiesPerJob) 
-                errors.push(`Maximum ${CONFIG.VALIDATION_RULES.maxDutiesPerJob} duties allowed`);
-            
-            exp.duties.forEach((duty, index) => {
-                if (this.isEmpty(duty)) errors.push(`Duty ${index + 1} is empty`);
-                if (duty.length < CONFIG.VALIDATION_RULES.minDutyLength) 
-                    errors.push(`Duty ${index + 1}: Minimum ${CONFIG.VALIDATION_RULES.minDutyLength} characters`);
-            });
-
-            return { valid: errors.length === 0, errors };
-        },
-
-        isValidEducation(edu) {
-            const errors = [];
-            if (this.isEmpty(edu.degree)) errors.push('Degree is required');
-            if (this.isEmpty(edu.school)) errors.push('School/University is required');
-            return { valid: errors.length === 0, errors };
-        },
-
-        validateAllData() {
-            const errors = {
-                summary: [],
-                skills: [],
-                experience: [],
-                education: [],
-                strengths: []
-            };
-
-            if (resumeData.summary && resumeData.summary.length < 10) {
-                errors.summary.push('Professional summary should be at least 10 characters');
-            }
-
-            resumeData.experience.forEach((exp, index) => {
-                const validation = this.isValidExperience(exp);
-                if (!validation.valid) {
-                    errors.experience.push(`Position ${index + 1}: ${validation.errors.join(', ')}`);
-                }
-            });
-
-            resumeData.education.forEach((edu, index) => {
-                const validation = this.isValidEducation(edu);
-                if (!validation.valid) {
-                    errors.education.push(`Education ${index + 1}: ${validation.errors.join(', ')}`);
-                }
-            });
-
-            if (resumeData.strengths && resumeData.strengths.length < 10) {
-                errors.strengths.push('Strengths should be at least 10 characters');
-            }
-
-            return { hasErrors: Object.values(errors).some(arr => arr.length > 0), errors };
-        }
-    };
-
-    // ==================== STORAGE SYSTEM ====================
-    const Storage = {
-        async saveData(key, data) {
-            try {
-                localStorage.setItem(key, JSON.stringify(data));
-                return true;
-            } catch (error) {
-                console.error('Storage error:', error);
-                showToast('Warning: Data may not persist properly', 'error');
-                return false;
-            }
-        },
-
-        loadData(key) {
-            try {
-                const data = localStorage.getItem(key);
-                return data ? JSON.parse(data) : null;
-            } catch (error) {
-                console.error('Load error:', error);
-                return null;
-            }
-        }
-    };
-
-    // ==================== PDF GENERATION & FILE UPDATE ====================
+    /* ===================== PDF LIB LOADER ===================== */
     function loadPdfLib() {
         return new Promise((resolve, reject) => {
-            if (typeof PDFLib !== 'undefined') {
-                resolve();
-                return;
-            }
-            const script = document.createElement('script');
-            script.src = 'https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js';
-            script.onload = resolve;
-            script.onerror = reject;
-            document.head.appendChild(script);
+            if (typeof PDFLib !== 'undefined') { resolve(); return; }
+            const s = document.createElement('script');
+            s.src = 'https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js';
+            s.onload = resolve; s.onerror = reject;
+            document.head.appendChild(s);
         });
     }
 
-    async function generateCompletePDF() {
-        try {
-            await loadPdfLib();
-            const pdfDoc = await PDFLib.PDFDocument.create();
-            let page = pdfDoc.addPage([612, 792]); // Letter size
-            const { width, height } = page.getSize();
-            const margin = 40;
-            const textColor = PDFLib.rgb(0, 0, 0);
-            
-            const helveticaBoldFont = await pdfDoc.embedFont(PDFLib.StandardFonts.HelveticaBold);
-            const helveticaFont = await pdfDoc.embedFont(PDFLib.StandardFonts.Helvetica);
+    /* ===================== PDF: RESUME ===================== */
+    async function generateResumePDF(data) {
+        await loadPdfLib();
+        const { PDFDocument, StandardFonts, rgb } = PDFLib;
+        const doc = await PDFDocument.create();
+        const bold = await doc.embedFont(StandardFonts.HelveticaBold);
+        const reg  = await doc.embedFont(StandardFonts.Helvetica);
+        const BLACK = rgb(0,0,0), GREY = rgb(0.4,0.4,0.4);
+        const W=612, H=792, M=40, COL=W-M*2, LH=14;
 
-            let currentY = height - margin;
-            const lineHeight = 14;
-            const columnWidth = width - (margin * 2);
+        let page = doc.addPage([W,H]);
+        let y = H - M;
 
-            // Helper: Word wrap text
-            function wrapText(text, maxWidth, fontSize) {
-                const words = text.split(' ');
-                const lines = [];
-                let currentLine = '';
+        function newPage() { page = doc.addPage([W,H]); y = H - M; }
+        function chk(n) { if (y < M + n) newPage(); }
 
-                words.forEach(word => {
-                    const testLine = currentLine + (currentLine ? ' ' : '') + word;
-                    if (testLine.length * fontSize * 0.5 > maxWidth && currentLine) {
-                        lines.push(currentLine);
-                        currentLine = word;
-                    } else {
-                        currentLine = testLine;
-                    }
-                });
-                if (currentLine) lines.push(currentLine);
-                return lines;
-            }
-
-            // Helper: Draw text with wrapping
-            function drawWrappedText(text, font, fontSize, x = margin) {
-                const lines = wrapText(text, columnWidth, fontSize);
-                lines.forEach(line => {
-                    if (currentY < margin) {
-                        page = pdfDoc.addPage([612, 792]);
-                        currentY = height - margin;
-                    }
-                    page.drawText(line, { x, y: currentY, size: fontSize, font, color: textColor });
-                    currentY -= lineHeight;
-                });
-            }
-
-            // Helper: Draw section title
-            function drawSection(title) {
-                if (currentY < margin + 40) {
-                    page = pdfDoc.addPage([612, 792]);
-                    currentY = height - margin;
-                }
-                currentY -= 8;
-                page.drawText(title, { x: margin, y: currentY, size: 12, font: helveticaBoldFont, color: textColor });
-                currentY -= lineHeight;
-                page.drawLine({
-                    start: { x: margin, y: currentY + 4 },
-                    end: { x: width - margin, y: currentY + 4 },
-                    thickness: 1,
-                    color: textColor
-                });
-                currentY -= 12;
-            }
-
-            // ========== HEADER ==========
-            page.drawText('CHRISTOPHER LEE CAJES', {
-                x: margin, y: currentY, size: 18, font: helveticaBoldFont, color: textColor
+        function drawWrapped(text, { font=reg, size=10, color=BLACK, indent=0 } = {}) {
+            const words = String(text||'').split(' ');
+            let line = '';
+            words.forEach(word => {
+                const test = line ? line+' '+word : word;
+                if (font.widthOfTextAtSize(test, size) > COL - indent && line) {
+                    chk(LH+4);
+                    page.drawText(line, {x:M+indent, y, size, font, color});
+                    y -= LH; line = word;
+                } else { line = test; }
             });
-            currentY -= lineHeight + 2;
-
-            page.drawText('Senior Software Developer', {
-                x: margin, y: currentY, size: 11, font: helveticaFont, color: textColor
-            });
-            currentY -= lineHeight + 6;
-
-            const contactInfo = `Email: ${resumeData.personalInfo.email} | Phone: ${resumeData.personalInfo.phone} | ${resumeData.personalInfo.location} | ${resumeData.personalInfo.wfh}`;
-            page.drawText(contactInfo, { x: margin, y: currentY, size: 9, font: helveticaFont, color: textColor });
-            currentY -= lineHeight + 10;
-
-            // ========== LINKEDIN ==========
-            // Draw LinkedIn URL before Professional Summary (from page data)
-            if (resumeData.personalInfo.linkedin) {
-                page.drawText('LinkedIn: ' + resumeData.personalInfo.linkedin, {
-                    x: margin, y: currentY, size: 9, font: helveticaFont, color: textColor
-                });
-                currentY -= lineHeight + 10;
-            }
-
-            // ========== PROFESSIONAL SUMMARY ==========
-            if (resumeData.summary && resumeData.summary.trim()) {
-                drawSection('PROFESSIONAL SUMMARY');
-                drawWrappedText(resumeData.summary, helveticaFont, 10);
-                currentY -= 6;
-            }
-
-            // ========== TECHNICAL SKILLS ==========
-            const hasAnySkill = resumeData.skills.primaryStack.length || resumeData.skills.databases.length || 
-                               resumeData.skills.frontend.length || resumeData.skills.multimedia.length;
-            if (hasAnySkill) {
-                drawSection('TECHNICAL SKILLS');
-
-                if (resumeData.skills.primaryStack.length) {
-                    page.drawText('Languages & Frameworks:', {
-                        x: margin, y: currentY, size: 10, font: helveticaBoldFont, color: textColor
-                    });
-                    currentY -= lineHeight;
-                    drawWrappedText(resumeData.skills.primaryStack.join(', '), helveticaFont, 9);
-                    currentY -= 6;
-                }
-
-                if (resumeData.skills.databases.length) {
-                    page.drawText('Databases & Tools:', {
-                        x: margin, y: currentY, size: 10, font: helveticaBoldFont, color: textColor
-                    });
-                    currentY -= lineHeight;
-                    drawWrappedText(resumeData.skills.databases.join(', '), helveticaFont, 9);
-                    currentY -= 6;
-                }
-
-                if (resumeData.skills.frontend.length) {
-                    page.drawText('Frontend & Mobile:', {
-                        x: margin, y: currentY, size: 10, font: helveticaBoldFont, color: textColor
-                    });
-                    currentY -= lineHeight;
-                    drawWrappedText(resumeData.skills.frontend.join(', '), helveticaFont, 9);
-                    currentY -= 6;
-                }
-
-                if (resumeData.skills.multimedia.length) {
-                    page.drawText('Multimedia & Creative:', {
-                        x: margin, y: currentY, size: 10, font: helveticaBoldFont, color: textColor
-                    });
-                    currentY -= lineHeight;
-                    drawWrappedText(resumeData.skills.multimedia.join(', '), helveticaFont, 9);
-                    currentY -= 6;
-                }
-            }
-
-            // ========== PROFESSIONAL EXPERIENCE ==========
-            if (resumeData.experience.length) {
-                drawSection('PROFESSIONAL EXPERIENCE');
-
-                resumeData.experience.forEach(exp => {
-                    if (currentY < margin + 60) {
-                        page = pdfDoc.addPage([612, 792]);
-                        currentY = height - margin;
-                    }
-
-                    page.drawText(exp.position, {
-                        x: margin, y: currentY, size: 10, font: helveticaBoldFont, color: textColor
-                    });
-                    currentY -= lineHeight;
-
-                    const durationLocation = `${exp.duration} | ${exp.location}`;
-                    page.drawText(durationLocation, {
-                        x: margin, y: currentY, size: 9, font: helveticaFont, color: textColor
-                    });
-                    currentY -= lineHeight + 4;
-
-                    exp.duties.forEach(duty => {
-                        if (duty.trim()) {
-                            if (currentY < margin + 40) {
-                                page = pdfDoc.addPage([612, 792]);
-                                currentY = height - margin;
-                            }
-                            page.drawText('• ', { x: margin + 10, y: currentY, size: 9, font: helveticaFont, color: textColor });
-                            
-                            const dutyLines = wrapText(duty, columnWidth - 25, 9);
-                            dutyLines.forEach(line => {
-                                if (currentY < margin + 40) {
-                                    page = pdfDoc.addPage([612, 792]);
-                                    currentY = height - margin;
-                                }
-                                page.drawText(line, { x: margin + 25, y: currentY, size: 9, font: helveticaFont, color: textColor });
-                                currentY -= lineHeight;
-                            });
-                        }
-                    });
-                    currentY -= 6;
-                });
-            }
-
-            // ========== EDUCATION ==========
-            if (resumeData.education.length) {
-                drawSection('EDUCATION');
-
-                resumeData.education.forEach(edu => {
-                    if (currentY < margin + 40) {
-                        page = pdfDoc.addPage([612, 792]);
-                        currentY = height - margin;
-                    }
-                    page.drawText(edu.degree, {
-                        x: margin, y: currentY, size: 10, font: helveticaBoldFont, color: textColor
-                    });
-                    currentY -= lineHeight;
-
-                    page.drawText(edu.school, {
-                        x: margin, y: currentY, size: 9, font: helveticaFont, color: textColor
-                    });
-                    currentY -= lineHeight + 6;
-                });
-            }
-
-            // ========== STRENGTHS & PREFERENCES ==========
-            if (resumeData.strengths && resumeData.strengths.trim()) {
-                drawSection('STRENGTHS & PREFERENCES');
-                drawWrappedText(resumeData.strengths, helveticaFont, 9);
-            }
-
-            return pdfDoc;
-        } catch (error) {
-            console.error('PDF generation error:', error);
-            throw error;
-        }
-    }
-
-    async function generateCoverLetterPDF(content) {
-        try {
-            await loadPdfLib();
-            const pdfDoc = await PDFLib.PDFDocument.create();
-            let page = pdfDoc.addPage([612, 792]);
-            const { width, height } = page.getSize();
-            const margin = 50;
-            let currentY = height - margin;
-            const lineHeight = 14;
-
-            const helveticaBoldFont = await pdfDoc.embedFont(PDFLib.StandardFonts.HelveticaBold);
-            const helveticaFont = await pdfDoc.embedFont(PDFLib.StandardFonts.Helvetica);
-            const textColor = PDFLib.rgb(0, 0, 0);
-
-            const lines = content.split('\n');
-            const maxWidth = width - (margin * 2);
-
-            lines.forEach(line => {
-                if (currentY < margin + 50) {
-                    page = pdfDoc.addPage([612, 792]);
-                    currentY = height - margin;
-                }
-
-                if (!line.trim()) {
-                    currentY -= 8;
-                    return;
-                }
-
-                let fontSize = 11;
-                let font = helveticaFont;
-
-                if (line.includes('Christopher Lee Cajes')) {
-                    fontSize = 12;
-                    font = helveticaBoldFont;
-                }
-
-                const words = line.split(' ');
-                let currentLine = '';
-
-                words.forEach(word => {
-                    const testLine = currentLine + (currentLine ? ' ' : '') + word;
-                    if (testLine.length * fontSize * 0.5 > maxWidth && currentLine) {
-                        page.drawText(currentLine, {
-                            x: margin, y: currentY, size: fontSize, font, color: textColor
-                        });
-                        currentY -= lineHeight;
-                        if (currentY < margin + 30) {
-                            page = pdfDoc.addPage([612, 792]);
-                            currentY = height - margin;
-                        }
-                        currentLine = word;
-                    } else {
-                        currentLine = testLine;
-                    }
-                });
-
-                if (currentLine) {
-                    page.drawText(currentLine, {
-                        x: margin, y: currentY, size: fontSize, font, color: textColor
-                    });
-                    currentY -= lineHeight;
-                }
-            });
-
-            return pdfDoc;
-        } catch (error) {
-            console.error('Cover letter PDF error:', error);
-            throw error;
-        }
-    }
-
-    // ==================== TOAST NOTIFICATIONS ====================
-    function createToastContainer() {
-        const container = document.createElement('div');
-        container.id = 'toastContainer';
-        container.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);z-index:10002;max-width:500px;';
-        document.body.appendChild(container);
-        return container;
-    }
-
-    function showToast(message, type = 'info') {
-        type = type || 'info';
-        const container = document.getElementById('toastContainer') || createToastContainer();
-        const toast = document.createElement('div');
-        const colors = { success: '#22c55e', error: '#ef4444', info: '#3b82f6', warning: '#f59e0b' };
-        toast.style.cssText = `
-            padding:12px 24px;border-radius:8px;color:white;font-weight:500;opacity:0;transform:translateY(-20px);
-            transition:all 0.3s ease;margin-bottom:8px;background:${colors[type] || colors.info};
-            box-shadow:0 4px 12px rgba(0,0,0,0.15);
-        `;
-        toast.textContent = message;
-        container.appendChild(toast);
-        setTimeout(() => { toast.style.opacity = '1'; toast.style.transform = 'translateY(0)'; }, 10);
-        setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 300); }, 3500);
-    }
-
-    // ==================== DATA LOADING FROM PAGE ====================
-    function loadResumeDataFromPage() {
-        const summaryEl = document.getElementById('summary');
-        if (summaryEl) {
-            const summaryP = summaryEl.querySelector('p');
-            if (summaryP) {
-                resumeData.summary = summaryP.textContent.trim();
-            }
+            if (line) { chk(LH+4); page.drawText(line, {x:M+indent, y, size, font, color}); y -= LH; }
         }
 
-        const skillsEl = document.getElementById('stack');
-        if (skillsEl) {
-            const cols = skillsEl.querySelectorAll('.col-md-6');
-            if (cols.length >= 4) {
-                resumeData.skills.primaryStack = Array.from(cols[0].querySelectorAll('.skill-badge')).map(b => b.textContent.trim());
-                resumeData.skills.databases = Array.from(cols[1].querySelectorAll('.skill-badge')).map(b => b.textContent.trim());
-                resumeData.skills.frontend = Array.from(cols[2].querySelectorAll('.skill-badge')).map(b => b.textContent.trim());
-                resumeData.skills.multimedia = Array.from(cols[3].querySelectorAll('.skill-badge')).map(b => b.textContent.trim());
-            }
+        function section(title) {
+            chk(32); y -= 8;
+            page.drawText(title, {x:M, y, size:12, font:bold, color:BLACK}); y -= LH;
+            page.drawLine({start:{x:M,y:y+4},end:{x:W-M,y:y+4},thickness:1,color:BLACK}); y -= 10;
         }
 
-        const expEl = document.getElementById('experience');
-        if (expEl) {
-            const expItems = expEl.querySelectorAll('.exp-item');
-            resumeData.experience = Array.from(expItems).map(item => {
-                const titleEl = item.querySelector('h6.fw-bold');
-                const durationEl = item.querySelector('span.small.text-accent');
-                const locationEl = item.querySelector('p.small.text-dim');
-                const dutiesList = item.querySelectorAll('li');
-                
-                return {
-                    position: titleEl ? titleEl.textContent.trim() : '',
-                    duration: durationEl ? durationEl.textContent.trim() : '',
-                    location: locationEl ? locationEl.textContent.trim() : '',
-                    duties: Array.from(dutiesList).map(li => li.textContent.trim())
-                };
-            });
+        const pi = data.personalInfo || {};
+
+        // Header
+        chk(60);
+        page.drawText((pi.name||'').toUpperCase(), {x:M, y, size:18, font:bold, color:BLACK}); y -= LH+2;
+        if (pi.title) { page.drawText(pi.title, {x:M, y, size:11, font:reg, color:GREY}); y -= LH+4; }
+        const contact = [pi.email,pi.phone,pi.location,pi.wfh].filter(Boolean).join(' | ');
+        if (contact) { page.drawText(contact, {x:M, y, size:9, font:reg, color:GREY}); y -= LH; }
+        if (pi.linkedin) { page.drawText('LinkedIn: '+pi.linkedin, {x:M, y, size:9, font:reg, color:GREY}); y -= LH+6; }
+        else { y -= 4; }
+
+        // Summary
+        if (data.summary && data.summary.trim()) {
+            section('PROFESSIONAL SUMMARY');
+            drawWrapped(data.summary, {size:10}); y -= 4;
         }
 
-        const eduEl = document.getElementById('education');
-        if (eduEl) {
-            const eduItems = eduEl.querySelectorAll('div');
-            resumeData.education = [];
-            
-            eduItems.forEach(function(div) {
-                const degreeEl = div.querySelector('h6.fw-bold');
-                if (degreeEl) {
-                    const schoolEl = div.querySelector('p.small.text-accent');
-                    let schoolText = schoolEl ? schoolEl.textContent.trim() : '';
-                    
-                    if (schoolText.includes('|')) {
-                        schoolText = schoolText.split('|')[0].trim();
-                    }
-                    
-                    resumeData.education.push({
-                        degree: degreeEl.textContent.trim(),
-                        school: schoolText
-                    });
+        // Skills
+        const sk = data.skills || {};
+        const groups = [['Languages & Frameworks',sk.primaryStack],['Databases & Tools',sk.databases],['Frontend & Mobile',sk.frontend],['Multimedia & Creative',sk.multimedia]];
+        const hasSkills = groups.some(([,arr]) => arr && arr.length);
+        if (hasSkills) {
+            section('TECHNICAL SKILLS');
+            groups.forEach(([label, arr]) => {
+                if (arr && arr.length) {
+                    chk(22); page.drawText(label+':', {x:M, y, size:10, font:bold, color:BLACK}); y -= LH;
+                    drawWrapped(arr.join(', '), {size:9}); y -= 4;
                 }
             });
         }
 
-        const strengthsEl = document.getElementById('strengths');
-        if (strengthsEl) {
-            const strengthsP = strengthsEl.querySelector('p.small.text-dim');
-            if (strengthsP) {
-                resumeData.strengths = strengthsP.innerHTML.replace(/<br>/g, '\n').replace(/<strong>/g, '').replace(/<\/strong>/g, '').trim();
-            }
-        }
-
-        const projectsEl = document.getElementById('projects');
-        if (projectsEl) {
-            const projectItems = projectsEl.querySelectorAll('.row.g-4 .col-md-6');
-            resumeData.projects = Array.from(projectItems).map(item => {
-                const titleEl = item.querySelector('h6.fw-bold');
-                const descriptionEl = item.querySelector('p.small.text-dim');
-                const linkEl = item.querySelector('a');
-                
-                return {
-                    title: titleEl ? titleEl.textContent.trim() : '',
-                    description: descriptionEl ? descriptionEl.textContent.trim() : '',
-                    link: linkEl ? linkEl.href : '',
-                    linkText: linkEl ? linkEl.textContent.trim() : ''
-                };
-            }).filter(project => project.title);
-        }
-
-        // Extract LinkedIn URL from the HTML page
-        const linkedinLink = document.querySelector('a[href*="linkedin.com"]');
-        if (linkedinLink) {
-            resumeData.personalInfo.linkedin = linkedinLink.href;
-        }
-    }
-
-    // ==================== PAGE UPDATE FUNCTIONS ====================
-    function updatePageContent() {
-        const summaryEl = document.getElementById('summary');
-        if (summaryEl) {
-            const p = summaryEl.querySelector('p');
-            if (p) p.textContent = resumeData.summary;
-        }
-
-        const skillsEl = document.getElementById('stack');
-        if (skillsEl) {
-            const cols = skillsEl.querySelectorAll('.col-md-6');
-            [resumeData.skills.primaryStack, resumeData.skills.databases, resumeData.skills.frontend, resumeData.skills.multimedia].forEach((skills, i) => {
-                if (cols[i]) {
-                    cols[i].innerHTML = skills.map(s => `<span class="skill-badge">${escapeHtml(s)}</span>`).join('');
-                }
+        // Experience
+        if ((data.experience||[]).length) {
+            section('PROFESSIONAL EXPERIENCE');
+            data.experience.forEach(exp => {
+                chk(50);
+                page.drawText(exp.position||'', {x:M, y, size:10, font:bold, color:BLACK}); y -= LH;
+                const meta = [exp.duration,exp.location].filter(Boolean).join(' | ');
+                if (meta) { page.drawText(meta, {x:M, y, size:9, font:reg, color:GREY}); y -= LH+2; }
+                (exp.duties||[]).forEach(duty => {
+                    chk(LH+6);
+                    page.drawText('\u2022', {x:M+10, y, size:9, font:reg, color:BLACK});
+                    drawWrapped(duty, {size:9, indent:20});
+                });
+                y -= 6;
             });
         }
 
-        const expEl = document.getElementById('experience');
-        if (expEl) {
-            expEl.innerHTML = resumeData.experience.map(exp => `
-                <div class="exp-item">
-                    <h6 class="fw-bold mb-0">${escapeHtml(exp.position)}</h6>
-                    <span class="small text-accent">${escapeHtml(exp.duration)}</span>
-                    <span class="small text-dim">${escapeHtml(exp.location)}</span>
-                    <ul class="small">
-                        ${exp.duties.map(duty => `<li>${escapeHtml(duty)}</li>`).join('')}
-                    </ul>
-                </div>
-            `).join('');
+        // Projects
+        const projs = (data.projects||[]).filter(p => p.title && p.title.trim());
+        if (projs.length) {
+            section('PROJECTS & PORTFOLIO');
+            projs.forEach(p => {
+                chk(30);
+                page.drawText(p.title||'', {x:M, y, size:10, font:bold, color:BLACK}); y -= LH;
+                if (p.description) drawWrapped(p.description, {size:9});
+                if (p.link || p.linkText) { page.drawText(p.linkText||p.link||'', {x:M, y, size:9, font:reg, color:GREY}); y -= LH; }
+                y -= 4;
+            });
         }
 
-        const eduEl = document.getElementById('education');
-        if (eduEl) {
-            eduEl.innerHTML = resumeData.education.map(edu => `
-                <div class="mb-3">
-                    <h6 class="fw-bold mb-1">${escapeHtml(edu.degree)}</h6>
-                    <p class="small text-accent mb-0">${escapeHtml(edu.school)}</p>
-                </div>
-            `).join('');
+        // Education
+        if ((data.education||[]).length) {
+            section('EDUCATION');
+            data.education.forEach(edu => {
+                chk(28);
+                page.drawText(edu.degree||'', {x:M, y, size:10, font:bold, color:BLACK}); y -= LH;
+                page.drawText(edu.school||'', {x:M, y, size:9, font:reg, color:GREY}); y -= LH+4;
+            });
         }
-
-        const strengthsEl = document.getElementById('strengths');
-        if (strengthsEl) {
-            const p = strengthsEl.querySelector('.small.text-dim');
-            if (p) p.textContent = resumeData.strengths;
-        }
-
-        const projectsEl = document.getElementById('projects');
-        if (projectsEl && resumeData.projects.length > 0) {
-            projectsEl.innerHTML = `
-                <div class="row g-4">
-                    ${resumeData.projects.map(project => `
-                        <div class="col-md-6">
-                            <div class="card h-100 border-0 bg-transparent">
-                                <div class="card-body">
-                                    <h6 class="fw-bold mb-2">${escapeHtml(project.title)}</h6>
-                                    <p class="small text-dim mb-3">${escapeHtml(project.description)}</p>
-                                    ${project.link ? `<a href="${escapeHtml(project.link)}" class="btn btn-outline-primary btn-sm" target="_blank">${escapeHtml(project.linkText || 'View Project')}</a>` : ''}
-                                </div>
-                            </div>
-                        </div>
-                    `).join('')}
-                </div>
-            `;
-        }
-    }
-
-    // ==================== HELPER FUNCTIONS ====================
-    function escapeHtml(text) {
-        const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
-        return text.replace(/[&<>"']/g, m => map[m]);
-    }
-
-    function updatePDFFile(blob, filename) {
-        // Create object URL for the blob
-        const url = URL.createObjectURL(blob);
-        
-        // Find download link and update it
-        const downloadLink = document.querySelector(`a[href*="${filename}"]`) || 
-                           document.querySelector(`a[download*="${filename}"]`);
-        
-        if (downloadLink) {
-            downloadLink.href = url;
-            downloadLink.download = filename;
-        }
-        
-        // Also trigger download to replace the actual file
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        
-        // Clean up URL after a delay
-        setTimeout(() => URL.revokeObjectURL(url), 100);
-    }
-
-    // ==================== UI SETUP ====================
-    function createEditButtons() {
-        const authBtn = document.createElement('button');
-        authBtn.id = 'authBtn';
-        authBtn.innerHTML = '<i class="fas fa-lock"></i> Sign In to Edit';
-        authBtn.style.cssText = `
-            position:fixed;right:20px;top:20px;z-index:9999;border:none;border-radius:50px;
-            padding:12px 24px;font-weight:600;font-size:0.85rem;cursor:pointer;transition:all 0.3s ease;
-            box-shadow:0 4px 15px rgba(239,68,68,0.3);display:flex;align-items:center;gap:8px;
-            background:linear-gradient(135deg,#ef4444,#dc2626);color:white;
-        `;
-        authBtn.onclick = handlePasswordAuth;
-        document.body.appendChild(authBtn);
-
-        const editResumeBtn = document.createElement('button');
-        editResumeBtn.id = 'editResumeBtn';
-        editResumeBtn.innerHTML = '<i class="fas fa-pen"></i> Edit Resume';
-        editResumeBtn.style.cssText = `
-            position:fixed;right:20px;top:20px;z-index:9999;border:none;border-radius:50px;
-            padding:12px 24px;font-weight:600;font-size:0.85rem;cursor:pointer;transition:all 0.3s ease;
-            box-shadow:0 4px 15px rgba(56,189,248,0.3);display:none;align-items:center;gap:8px;
-            background:linear-gradient(135deg,#38bdf8,#0ea5e9);color:white;
-        `;
-        editResumeBtn.onclick = () => openEditModal('resume');
-        document.body.appendChild(editResumeBtn);
-
-        const editCoverLetterBtn = document.createElement('button');
-        editCoverLetterBtn.id = 'editCoverLetterBtn';
-        editCoverLetterBtn.innerHTML = '<i class="fas fa-pen"></i> Edit Cover Letter';
-        editCoverLetterBtn.style.cssText = `
-            position:fixed;right:20px;top:80px;z-index:9999;border:none;border-radius:50px;
-            padding:12px 24px;font-weight:600;font-size:0.85rem;cursor:pointer;transition:all 0.3s ease;
-            box-shadow:0 4px 15px rgba(168,85,247,0.3);display:none;align-items:center;gap:8px;
-            background:linear-gradient(135deg,#a855f7,#7c3aed);color:white;
-        `;
-        editCoverLetterBtn.onclick = () => openEditModal('coverletter');
-        document.body.appendChild(editCoverLetterBtn);
-
-        const userInfo = document.createElement('div');
-        userInfo.id = 'userInfo';
-        userInfo.style.cssText = `
-            position:fixed;right:20px;top:140px;z-index:9999;display:none;align-items:center;gap:8px;
-            padding:6px 12px;background:rgba(34,197,94,0.1);border:1px solid #22c55e;
-            border-radius:20px;font-size:0.75rem;color:#22c55e;
-        `;
-        userInfo.innerHTML = '<i class="fas fa-check-circle"></i><span>Authenticated</span>';
-        document.body.appendChild(userInfo);
-    }
-
-    function createModals() {
-        // Resume Modal
-        const resumeBackdrop = document.createElement('div');
-        resumeBackdrop.id = 'resumeModalBackdrop';
-        resumeBackdrop.style.cssText = `
-            position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);
-            backdrop-filter:blur(8px);z-index:10000;opacity:0;visibility:hidden;transition:all 0.4s ease;
-        `;
-        resumeBackdrop.onclick = () => closeEditModal('resume');
-        document.body.appendChild(resumeBackdrop);
-
-        const resumeModal = document.createElement('div');
-        resumeModal.id = 'resumeModal';
-        resumeModal.style.cssText = `
-            position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) scale(0.9);width:95%;max-width:1000px;
-            max-height:90vh;background:var(--card-bg);border:1px solid var(--border);border-radius:16px;z-index:10001;
-            opacity:0;visibility:hidden;transition:all 0.4s cubic-bezier(0.68,-0.55,0.265,1.55);overflow:hidden;
-            box-shadow:0 25px 50px -12px rgba(0,0,0,0.5);display:flex;flex-direction:column;
-        `;
-        resumeModal.innerHTML = getResumeModalContent();
-        document.body.appendChild(resumeModal);
-
-        // Cover Letter Modal
-        const clBackdrop = document.createElement('div');
-        clBackdrop.id = 'coverLetterModalBackdrop';
-        clBackdrop.style.cssText = `
-            position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);
-            backdrop-filter:blur(8px);z-index:10000;opacity:0;visibility:hidden;transition:all 0.4s ease;
-        `;
-        clBackdrop.onclick = () => closeEditModal('coverletter');
-        document.body.appendChild(clBackdrop);
-
-        const clModal = document.createElement('div');
-        clModal.id = 'coverLetterModal';
-        clModal.style.cssText = `
-            position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) scale(0.9);width:95%;max-width:900px;
-            max-height:90vh;background:var(--card-bg);border:1px solid var(--border);border-radius:16px;z-index:10001;
-            opacity:0;visibility:hidden;transition:all 0.4s cubic-bezier(0.68,-0.55,0.265,1.55);overflow:hidden;
-            box-shadow:0 25px 50px -12px rgba(0,0,0,0.5);display:flex;flex-direction:column;
-        `;
-        clModal.innerHTML = getCoverLetterModalContent();
-        document.body.appendChild(clModal);
-    }
-
-    function getResumeModalContent() {
-        return `
-            <div style="padding:1.5rem 2rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;background:linear-gradient(135deg,rgba(56,189,248,0.1),rgba(168,85,247,0.1));">
-                <h4 style="margin:0;color:var(--accent);font-weight:700;display:flex;align-items:center;gap:10px;"><i class="fas fa-pen-to-square"></i> Edit Resume</h4>
-                <button onclick="closeEditModal('resume')" style="background:none;border:none;color:var(--text-dim);font-size:1.5rem;cursor:pointer;transition:all 0.3s ease;width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;">&times;</button>
-            </div>
-            <div id="resumeModalBody" style="flex:1;padding:2rem;overflow-y:auto;"></div>
-            <div style="padding:1.5rem 2rem;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:12px;background:rgba(0,0,0,0.05);flex-wrap:wrap;">
-                <button onclick="closeEditModal('resume')" style="background:transparent;color:var(--text-dim);border:1px solid var(--border);padding:10px 24px;border-radius:8px;font-weight:600;cursor:pointer;transition:all 0.3s ease;">Cancel</button>
-                <button onclick="saveResume()" style="background:linear-gradient(135deg,var(--accent),#0ea5e9);color:white;border:none;padding:10px 24px;border-radius:8px;font-weight:600;cursor:pointer;transition:all 0.3s ease;"><i class="fas fa-save" style="margin-right:8px;"></i>Save</button>
-            </div>
-        `;
-    }
-
-    function getCoverLetterModalContent() {
-        return `
-            <div style="padding:1.5rem 2rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;background:linear-gradient(135deg,rgba(56,189,248,0.1),rgba(168,85,247,0.1));">
-                <h4 style="margin:0;color:var(--accent);font-weight:700;display:flex;align-items:center;gap:10px;"><i class="fas fa-file-alt"></i> Edit Cover Letter</h4>
-                <button onclick="closeEditModal('coverletter')" style="background:none;border:none;color:var(--text-dim);font-size:1.5rem;cursor:pointer;transition:all 0.3s ease;width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;">&times;</button>
-            </div>
-            <div style="flex:1;padding:2rem;overflow-y:auto;">
-                <div style="margin-bottom:1.5rem;">
-                    <label style="display:block;margin-bottom:0.5rem;font-weight:500;font-size:0.85rem;color:var(--text-dim);">Cover Letter Content <span style="color:#ef4444;">*</span></label>
-                    <textarea id="coverLetterContent" placeholder="Enter your cover letter content here..." style="width:100%;padding:10px 14px;background:rgba(0,0,0,0.1);border:1px solid var(--border);border-radius:8px;color:var(--text-main);font-size:0.9rem;min-height:400px;resize:vertical;font-family:monospace;line-height:1.6;"></textarea>
-                    <small id="coverLetterError" style="color:#ef4444;display:none;margin-top:0.5rem;"></small>
-                </div>
-            </div>
-            <div style="padding:1.5rem 2rem;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:12px;background:rgba(0,0,0,0.05);flex-wrap:wrap;">
-                <button onclick="closeEditModal('coverletter')" style="background:transparent;color:var(--text-dim);border:1px solid var(--border);padding:10px 24px;border-radius:8px;font-weight:600;cursor:pointer;transition:all 0.3s ease;">Cancel</button>
-                <button onclick="saveCoverLetter()" style="background:linear-gradient(135deg,var(--accent),#0ea5e9);color:white;border:none;padding:10px 24px;border-radius:8px;font-weight:600;cursor:pointer;transition:all 0.3s ease;"><i class="fas fa-save" style="margin-right:8px;"></i>Save</button>
-            </div>
-        `;
-    }
-
-    // ==================== MODAL FUNCTIONS ====================
-    window.openEditModal = function(type) {
-        if (!isAuthenticated) {
-            showToast('Please sign in first.', 'error');
-            return;
-        }
-        if (type === 'resume') {
-            document.getElementById('resumeModalBackdrop').style.opacity = '1';
-            document.getElementById('resumeModalBackdrop').style.visibility = 'visible';
-            document.getElementById('resumeModal').style.opacity = '1';
-            document.getElementById('resumeModal').style.visibility = 'visible';
-            document.getElementById('resumeModal').style.transform = 'translate(-50%,-50%) scale(1)';
-            loadResumeEditor();
-        } else {
-            document.getElementById('coverLetterModalBackdrop').style.opacity = '1';
-            document.getElementById('coverLetterModalBackdrop').style.visibility = 'visible';
-            document.getElementById('coverLetterModal').style.opacity = '1';
-            document.getElementById('coverLetterModal').style.visibility = 'visible';
-            document.getElementById('coverLetterModal').style.transform = 'translate(-50%,-50%) scale(1)';
-            loadCoverLetterContent();
-        }
-    };
-
-    window.closeEditModal = function(type) {
-        if (type === 'resume') {
-            document.getElementById('resumeModalBackdrop').style.opacity = '0';
-            document.getElementById('resumeModalBackdrop').style.visibility = 'hidden';
-            document.getElementById('resumeModal').style.opacity = '0';
-            document.getElementById('resumeModal').style.visibility = 'hidden';
-            document.getElementById('resumeModal').style.transform = 'translate(-50%,-50%) scale(0.9)';
-        } else {
-            document.getElementById('coverLetterModalBackdrop').style.opacity = '0';
-            document.getElementById('coverLetterModalBackdrop').style.visibility = 'hidden';
-            document.getElementById('coverLetterModal').style.opacity = '0';
-            document.getElementById('coverLetterModal').style.visibility = 'hidden';
-            document.getElementById('coverLetterModal').style.transform = 'translate(-50%,-50%) scale(0.9)';
-        }
-    };
-
-    // ==================== RESUME EDITOR ====================
-    window.loadResumeEditor = function() {
-        const body = document.getElementById('resumeModalBody');
-        let html = '';
-
-        // Professional Summary
-        html += `
-            <div style="margin-bottom:2rem;padding:1.5rem;background:rgba(0,0,0,0.05);border-radius:12px;border:1px solid var(--border);">
-                <h6 style="color:var(--accent);margin-bottom:1rem;font-weight:600;"><i class="fas fa-user" style="margin-right:8px;"></i>Professional Summary</h6>
-                <textarea id="editSummary" placeholder="Brief professional summary..." style="width:100%;padding:10px 14px;background:rgba(0,0,0,0.1);border:1px solid var(--border);border-radius:8px;color:var(--text-main);font-size:0.9rem;min-height:100px;resize:vertical;font-family:inherit;line-height:1.6;">${escapeHtml(resumeData.summary)}</textarea>
-                <small id="summaryError" style="color:#ef4444;display:none;margin-top:0.5rem;"></small>
-            </div>
-        `;
-
-        // Skills Section
-        html += `
-            <div style="margin-bottom:2rem;padding:1.5rem;background:rgba(0,0,0,0.05);border-radius:12px;border:1px solid var(--border);">
-                <h6 style="color:var(--accent);margin-bottom:1rem;font-weight:600;"><i class="fas fa-code" style="margin-right:8px;"></i>Core Technical Skills</h6>
-                ${getSkillsEditor('primaryStack', 'Primary Stack (C#, ASP.NET Core, etc.)')}
-                <hr style="margin:1rem 0;border:none;border-top:1px solid var(--border);">
-                ${getSkillsEditor('databases', 'Databases & Tools')}
-                <hr style="margin:1rem 0;border:none;border-top:1px solid var(--border);">
-                ${getSkillsEditor('frontend', 'Frontend & Mobile')}
-                <hr style="margin:1rem 0;border:none;border-top:1px solid var(--border);">
-                ${getSkillsEditor('multimedia', 'Multimedia & Creative')}
-            </div>
-        `;
-
-        // Experience Section
-        html += `
-            <div style="margin-bottom:2rem;padding:1.5rem;background:rgba(0,0,0,0.05);border-radius:12px;border:1px solid var(--border);">
-                <h6 style="color:var(--accent);margin-bottom:1rem;font-weight:600;"><i class="fas fa-briefcase" style="margin-right:8px;"></i>Professional Experience</h6>
-                <div id="experienceList" style="margin-bottom:1rem;"></div>
-                <button onclick="addExperience()" style="background:rgba(34,197,94,0.1);color:#22c55e;border:1px solid #22c55e;padding:8px 16px;border-radius:8px;font-weight:600;cursor:pointer;transition:all 0.3s ease;width:100%;"><i class="fas fa-plus" style="margin-right:6px;"></i>Add Experience</button>
-            </div>
-        `;
-
-        // Deployed Projects & Portfolio
-        html += `
-            <div style="margin-bottom:2rem;padding:1.5rem;background:rgba(0,0,0,0.05);border-radius:12px;border:1px solid var(--border);">
-                <h6 style="color:var(--accent);margin-bottom:1rem;font-weight:600;"><i class="fas fa-project-diagram" style="margin-right:8px;"></i>Deployed Projects & Portfolio</h6>
-                <div id="projectsList" style="margin-bottom:1rem;"></div>
-                <button onclick="addProject()" style="background:rgba(34,197,94,0.1);color:#22c55e;border:1px solid #22c55e;padding:8px 16px;border-radius:8px;font-weight:600;cursor:pointer;transition:all 0.3s ease;width:100%;"><i class="fas fa-plus" style="margin-right:6px;"></i>Add Project</button>
-            </div>
-        `;
-
-        // Education Section
-        html += `
-            <div style="margin-bottom:2rem;padding:1.5rem;background:rgba(0,0,0,0.05);border-radius:12px;border:1px solid var(--border);">
-                <h6 style="color:var(--accent);margin-bottom:1rem;font-weight:600;"><i class="fas fa-graduation-cap" style="margin-right:8px;"></i>Education</h6>
-                <div id="educationList" style="margin-bottom:1rem;"></div>
-                <button onclick="addEducation()" style="background:rgba(34,197,94,0.1);color:#22c55e;border:1px solid #22c55e;padding:8px 16px;border-radius:8px;font-weight:600;cursor:pointer;transition:all 0.3s ease;width:100%;"><i class="fas fa-plus" style="margin-right:6px;"></i>Add Education</button>
-            </div>
-        `;
 
         // Strengths
-        html += `
-            <div style="margin-bottom:2rem;padding:1.5rem;background:rgba(0,0,0,0.05);border-radius:12px;border:1px solid var(--border);">
-                <h6 style="color:var(--accent);margin-bottom:1rem;font-weight:600;"><i class="fas fa-star" style="margin-right:8px;"></i>Strengths & Preferences</h6>
-                <textarea id="editStrengths" placeholder="Your strengths and work preferences..." style="width:100%;padding:10px 14px;background:rgba(0,0,0,0.1);border:1px solid var(--border);border-radius:8px;color:var(--text-main);font-size:0.9rem;min-height:120px;resize:vertical;font-family:inherit;line-height:1.6;">${escapeHtml(resumeData.strengths)}</textarea>
-                <small id="strengthsError" style="color:#ef4444;display:none;margin-top:0.5rem;"></small>
-            </div>
+        if (data.strengths && data.strengths.trim()) {
+            section('STRENGTHS & PREFERENCES');
+            data.strengths.split('\n').forEach(line => {
+                if (line.trim()) drawWrapped(line, {size:9});
+                else y -= 5;
+            });
+        }
+
+        return doc;
+    }
+
+    /* ===================== PDF: COVER LETTER ===================== */
+    async function generateCoverLetterPDF(content) {
+        await loadPdfLib();
+        const { PDFDocument, StandardFonts, rgb } = PDFLib;
+        const doc = await PDFDocument.create();
+        const bold = await doc.embedFont(StandardFonts.HelveticaBold);
+        const reg  = await doc.embedFont(StandardFonts.Helvetica);
+        const BLACK = rgb(0,0,0);
+        const W=612, H=792, M=50, COL=W-M*2, LH=15;
+
+        let page = doc.addPage([W,H]);
+        let y = H - M;
+        let firstLine = true;
+
+        function chk(n) { if (y < M+n) { page = doc.addPage([W,H]); y = H - M; } }
+
+        const lines = (content||'').split('\n');
+        lines.forEach(rawLine => {
+            if (!rawLine.trim()) { y -= 9; return; }
+            const font = firstLine ? bold : reg;
+            const size = firstLine ? 12 : 11;
+            firstLine = false;
+            const words = rawLine.split(' ');
+            let line = '';
+            words.forEach(word => {
+                const test = line ? line+' '+word : word;
+                if (font.widthOfTextAtSize(test, size) > COL && line) {
+                    chk(LH+4); page.drawText(line, {x:M, y, size, font, color:BLACK}); y -= LH; line = word;
+                } else { line = test; }
+            });
+            if (line) { chk(LH+4); page.drawText(line, {x:M, y, size, font, color:BLACK}); y -= LH; }
+        });
+        return doc;
+    }
+
+    function downloadBlob(blob, filename) {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = filename;
+        document.body.appendChild(a); a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 200);
+    }
+
+    function updateDownloadLink(id, blob, filename) {
+        const el = document.getElementById(id);
+        if (el) { el.href = URL.createObjectURL(blob); el.download = filename; }
+    }
+
+    /* ===================== VALIDATION ===================== */
+    function validateAll(data) {
+        const errs = [];
+        if (!data.summary || data.summary.trim().length < 10) errs.push('Summary is too short (min 10 chars)');
+        if (!data.strengths || data.strengths.trim().length < 5) errs.push('Strengths is too short');
+        (data.experience||[]).forEach((exp,i) => {
+            if (!exp.position.trim()) errs.push(`Experience ${i+1}: position required`);
+            if (!exp.duration.trim()) errs.push(`Experience ${i+1}: duration required`);
+            if (!exp.location.trim()) errs.push(`Experience ${i+1}: location required`);
+            if (!(exp.duties||[]).length) errs.push(`Experience ${i+1}: at least one duty required`);
+        });
+        (data.education||[]).forEach((edu,i) => {
+            if (!edu.degree.trim()) errs.push(`Education ${i+1}: degree required`);
+            if (!edu.school.trim()) errs.push(`Education ${i+1}: school required`);
+        });
+        return errs;
+    }
+
+    /* ===================== EDITOR STYLES ===================== */
+    function injectStyles() {
+        if (document.getElementById('_eStyles')) return;
+        const s = document.createElement('style');
+        s.id = '_eStyles';
+        s.textContent = `
+        ._ec{background:rgba(0,0,0,0.06);border:1px solid var(--border);border-radius:12px;padding:1.2rem 1.4rem;margin-bottom:1.2rem;}
+        ._ect{color:var(--accent);font-weight:700;margin-bottom:1rem;font-size:0.88rem;}
+        ._sc{background:rgba(0,0,0,0.1);border:1px solid var(--border);border-radius:8px;padding:1rem;margin-bottom:10px;}
+        ._i{width:100%;padding:8px 12px;background:rgba(0,0,0,0.12);border:1px solid var(--border);border-radius:7px;color:var(--text-main);font-size:0.875rem;margin-bottom:8px;font-family:inherit;line-height:1.5;outline:none;transition:border-color 0.2s;box-sizing:border-box;}
+        ._i:focus{border-color:var(--accent);}
+        textarea._i{resize:vertical;}
+        ._lbl{display:block;font-size:0.77rem;font-weight:600;color:var(--text-dim);margin-bottom:4px;}
+        ._badd{width:100%;background:rgba(34,197,94,0.1);color:#22c55e;border:1px dashed #22c55e;border-radius:8px;padding:8px 14px;font-weight:600;cursor:pointer;transition:background 0.2s;font-size:0.84rem;}
+        ._badd:hover{background:rgba(34,197,94,0.2);}
+        ._bdel{background:rgba(239,68,68,0.1);color:#ef4444;border:1px solid rgba(239,68,68,0.3);border-radius:6px;padding:5px 11px;cursor:pointer;font-size:0.8rem;transition:background 0.2s;}
+        ._bdel:hover{background:rgba(239,68,68,0.2);}
         `;
+        document.head.appendChild(s);
+    }
 
-        body.innerHTML = html;
-
-        // Populate experience
-        const expList = document.getElementById('experienceList');
-        resumeData.experience.forEach((exp, index) => {
-            expList.appendChild(createExperienceEditor(index, exp));
-        });
-
-        // Populate projects
-        const projectsList = document.getElementById('projectsList');
-        resumeData.projects.forEach((project, index) => {
-            projectsList.appendChild(createProjectEditor(index, project));
-        });
-
-        // Populate education
-        const eduList = document.getElementById('educationList');
-        resumeData.education.forEach((edu, index) => {
-            eduList.appendChild(createEducationEditor(index, edu));
-        });
-    };
-
-    function getSkillsEditor(skillType, label) {
+    /* ===================== BUILD EDITOR HTML ===================== */
+    function buildEditorHTML() {
+        const d = workingData;
+        const pi = d.personalInfo || {};
         return `
-            <div style="margin-bottom:1rem;">
-                <label style="display:block;margin-bottom:0.5rem;font-weight:500;font-size:0.85rem;color:var(--text-dim);">${label}</label>
-                <div id="skills-${skillType}" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:0.5rem;">
-                    ${resumeData.skills[skillType].map((skill, idx) => `
-                        <div style="display:flex;align-items:center;gap:6px;background:rgba(56,189,248,0.1);padding:6px 12px;border-radius:6px;border:1px solid rgba(56,189,248,0.3);">
-                            <span style="font-size:0.85rem;">${escapeHtml(skill)}</span>
-                            <button onclick="removeSkill('${skillType}', ${idx})" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:1rem;padding:0;margin:0;">&times;</button>
-                        </div>
-                    `).join('')}
+        <div class="_ec">
+            <div class="_ect"><i class="fas fa-id-card me-2"></i>Personal Information</div>
+            <div class="row g-2">
+                <div class="col-md-6"><label class="_lbl">Full Name</label><input class="_i" id="ei-name" value="${esc(pi.name)}" placeholder="Full Name*"></div>
+                <div class="col-md-6"><label class="_lbl">Professional Title</label><input class="_i" id="ei-title" value="${esc(pi.title)}" placeholder="Title*"></div>
+                <div class="col-md-6"><label class="_lbl">Email</label><input class="_i" id="ei-email" type="email" value="${esc(pi.email)}" placeholder="Email*"></div>
+                <div class="col-md-6"><label class="_lbl">Phone</label><input class="_i" id="ei-phone" type="tel" value="${esc(pi.phone)}" placeholder="Phone*"></div>
+                <div class="col-md-6"><label class="_lbl">Location</label><input class="_i" id="ei-location" value="${esc(pi.location)}" placeholder="Location"></div>
+                <div class="col-md-6"><label class="_lbl">WFH Preference</label><input class="_i" id="ei-wfh" value="${esc(pi.wfh)}" placeholder="e.g. Open to Permanent WFH"></div>
+                <div class="col-12"><label class="_lbl">LinkedIn URL</label><input class="_i" id="ei-linkedin" type="url" value="${esc(pi.linkedin)}" placeholder="https://linkedin.com/in/..."></div>
+            </div>
+        </div>
+        <div class="_ec">
+            <div class="_ect"><i class="fas fa-user me-2"></i>Professional Summary</div>
+            <textarea class="_i" id="ei-summary" rows="4">${esc(d.summary)}</textarea>
+        </div>
+        <div class="_ec">
+            <div class="_ect"><i class="fas fa-code me-2"></i>Technical Skills</div>
+            ${skillsEditor('primaryStack','Primary Stack & Backend')}
+            <hr style="margin:1rem 0;border:none;border-top:1px solid var(--border);">
+            ${skillsEditor('databases','Databases & Tools')}
+            <hr style="margin:1rem 0;border:none;border-top:1px solid var(--border);">
+            ${skillsEditor('frontend','Frontend & Mobile')}
+            <hr style="margin:1rem 0;border:none;border-top:1px solid var(--border);">
+            ${skillsEditor('multimedia','Multimedia & Creative')}
+        </div>
+        <div class="_ec">
+            <div class="_ect"><i class="fas fa-briefcase me-2"></i>Professional Experience</div>
+            <div id="_expList"></div>
+            <button class="_badd" onclick="_E.addExp()"><i class="fas fa-plus me-1"></i>Add Experience</button>
+        </div>
+        <div class="_ec">
+            <div class="_ect"><i class="fas fa-folder-open me-2"></i>Projects & Portfolio</div>
+            <div id="_projList"></div>
+            <button class="_badd" onclick="_E.addProj()"><i class="fas fa-plus me-1"></i>Add Project</button>
+        </div>
+        <div class="_ec">
+            <div class="_ect"><i class="fas fa-graduation-cap me-2"></i>Education</div>
+            <div id="_eduList"></div>
+            <button class="_badd" onclick="_E.addEdu()"><i class="fas fa-plus me-1"></i>Add Education</button>
+        </div>
+        <div class="_ec">
+            <div class="_ect"><i class="fas fa-star me-2"></i>Strengths & Preferences</div>
+            <textarea class="_i" id="ei-strengths" rows="4">${esc(d.strengths)}</textarea>
+        </div>`;
+    }
+
+    function skillsEditor(type, label) {
+        const arr = ((workingData.skills||{})[type]||[]);
+        return `<div style="margin-bottom:0.5rem;">
+            <label class="_lbl">${esc(label)}</label>
+            <div id="_sk-${type}" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;">
+                ${arr.map((s,i)=>`<span style="display:inline-flex;align-items:center;gap:5px;background:rgba(var(--accent-rgb),0.1);color:var(--accent);border:1px solid rgba(var(--accent-rgb),0.3);border-radius:6px;padding:3px 10px;font-size:0.78rem;">${esc(s)}<button onclick="_E.remSkill('${type}',${i})" style="background:none;border:none;color:inherit;cursor:pointer;padding:0;font-size:1rem;line-height:1;">&times;</button></span>`).join('')}
+            </div>
+            <div style="display:flex;gap:6px;">
+                <input class="_i" id="_ns-${type}" placeholder="Add skill..." style="margin:0;flex:1;" onkeydown="if(event.key==='Enter'){event.preventDefault();_E.addSkill('${type}');}">
+                <button onclick="_E.addSkill('${type}')" style="background:var(--accent);color:#fff;border:none;padding:8px 14px;border-radius:7px;cursor:pointer;font-weight:600;flex-shrink:0;"><i class="fas fa-plus"></i></button>
+            </div>
+        </div>`;
+    }
+
+    function reRenderSkills(type) {
+        const c = document.getElementById('_sk-'+type);
+        if (!c) return;
+        const arr = ((workingData.skills||{})[type]||[]);
+        c.innerHTML = arr.map((s,i)=>`<span style="display:inline-flex;align-items:center;gap:5px;background:rgba(var(--accent-rgb),0.1);color:var(--accent);border:1px solid rgba(var(--accent-rgb),0.3);border-radius:6px;padding:3px 10px;font-size:0.78rem;">${esc(s)}<button onclick="_E.remSkill('${type}',${i})" style="background:none;border:none;color:inherit;cursor:pointer;padding:0;font-size:1rem;line-height:1;">&times;</button></span>`).join('');
+    }
+
+    function renderExpList() {
+        const el = document.getElementById('_expList'); if (!el) return;
+        el.innerHTML = '';
+        workingData.experience.forEach((exp, i) => {
+            const d = document.createElement('div'); d.className = '_sc';
+            d.innerHTML = `
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                    <strong style="color:var(--accent);">Position ${i+1}</strong>
+                    <button class="_bdel" onclick="_E.remExp(${i})"><i class="fas fa-trash"></i> Remove</button>
                 </div>
-                <div style="display:flex;gap:8px;">
-                    <input type="text" id="newSkill-${skillType}" placeholder="Enter skill..." style="flex:1;padding:8px 12px;background:rgba(0,0,0,0.1);border:1px solid var(--border);border-radius:6px;color:var(--text-main);font-size:0.9rem;">
-                    <button onclick="addSkill('${skillType}')" style="background:var(--accent);color:white;border:none;padding:8px 16px;border-radius:6px;font-weight:600;cursor:pointer;transition:all 0.3s ease;"><i class="fas fa-plus"></i></button>
+                <input class="_i" placeholder="Position / Title*" value="${esc(exp.position)}" oninput="workingData.experience[${i}].position=this.value">
+                <input class="_i" placeholder="Duration (e.g. Jan 2020 – Dec 2022)*" value="${esc(exp.duration)}" oninput="workingData.experience[${i}].duration=this.value">
+                <input class="_i" placeholder="Location*" value="${esc(exp.location)}" oninput="workingData.experience[${i}].location=this.value">
+                <label class="_lbl">Duties*</label>
+                <div id="_dts-${i}"></div>
+                <div style="display:flex;gap:6px;margin-bottom:6px;">
+                    <input class="_i" id="_nd-${i}" placeholder="Add duty..." style="margin:0;flex:1;" onkeydown="if(event.key==='Enter'){event.preventDefault();_E.addDuty(${i});}">
+                    <button onclick="_E.addDuty(${i})" style="background:var(--accent);color:#fff;border:none;padding:8px 14px;border-radius:7px;cursor:pointer;font-weight:600;flex-shrink:0;"><i class="fas fa-plus"></i></button>
+                </div>`;
+            el.appendChild(d);
+            renderDuties(i);
+        });
+    }
+
+    function renderDuties(ei) {
+        const el = document.getElementById('_dts-'+ei); if (!el) return;
+        el.innerHTML = (workingData.experience[ei].duties||[]).map((d,di)=>`
+            <div style="display:flex;gap:6px;margin-bottom:6px;">
+                <input class="_i" style="margin:0;flex:1;" value="${esc(d)}" oninput="workingData.experience[${ei}].duties[${di}]=this.value" placeholder="Duty...">
+                <button class="_bdel" onclick="_E.remDuty(${ei},${di})" style="padding:6px 10px;flex-shrink:0;"><i class="fas fa-trash"></i></button>
+            </div>`).join('');
+    }
+
+    function renderProjList() {
+        const el = document.getElementById('_projList'); if (!el) return;
+        el.innerHTML = '';
+        workingData.projects.forEach((p, i) => {
+            const d = document.createElement('div'); d.className = '_sc';
+            d.innerHTML = `
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                    <strong style="color:var(--accent);">Project ${i+1}</strong>
+                    <button class="_bdel" onclick="_E.remProj(${i})"><i class="fas fa-trash"></i> Remove</button>
                 </div>
-                <small id="skillError-${skillType}" style="color:#ef4444;display:none;margin-top:0.5rem;"></small>
-            </div>
-        `;
-    }
-
-    window.addSkill = function(skillType) {
-        const input = document.getElementById(`newSkill-${skillType}`);
-        const skill = input.value.trim();
-        const error = document.getElementById(`skillError-${skillType}`);
-
-        const validation = Validator.isValidSkill(skill);
-        if (!validation.valid) {
-            error.textContent = validation.error;
-            error.style.display = 'block';
-            return;
-        }
-
-        if (resumeData.skills[skillType].length >= CONFIG.VALIDATION_RULES.maxSkills) {
-            error.textContent = `Maximum ${CONFIG.VALIDATION_RULES.maxSkills} skills allowed`;
-            error.style.display = 'block';
-            return;
-        }
-
-        resumeData.skills[skillType].push(skill);
-        error.style.display = 'none';
-        input.value = '';
-        window.loadResumeEditor();
-    };
-
-    window.removeSkill = function(skillType, index) {
-        resumeData.skills[skillType].splice(index, 1);
-        window.loadResumeEditor();
-    };
-
-    function createExperienceEditor(index, exp) {
-        const container = document.createElement('div');
-        container.style.cssText = 'background:rgba(0,0,0,0.1);padding:1rem;border-radius:8px;margin-bottom:1rem;border:1px solid var(--border);';
-        container.innerHTML = `
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
-                <h6 style="margin:0;color:var(--accent);font-weight:600;">Position ${index + 1}</h6>
-                <button onclick="removeExperience(${index})" style="background:#ef4444;color:white;border:none;padding:6px 12px;border-radius:6px;font-size:0.85rem;cursor:pointer;transition:all 0.3s ease;"><i class="fas fa-trash"></i> Remove</button>
-            </div>
-            <input type="text" value="${escapeHtml(exp.position)}" onchange="updateExperience(${index}, 'position', this.value)" placeholder="Position/Title*" style="width:100%;padding:8px 12px;background:rgba(0,0,0,0.1);border:1px solid var(--border);border-radius:6px;color:var(--text-main);margin-bottom:0.5rem;font-size:0.9rem;">
-            <input type="text" value="${escapeHtml(exp.duration)}" onchange="updateExperience(${index}, 'duration', this.value)" placeholder="Duration (e.g., Jan 2020 - Dec 2021)*" style="width:100%;padding:8px 12px;background:rgba(0,0,0,0.1);border:1px solid var(--border);border-radius:6px;color:var(--text-main);margin-bottom:0.5rem;font-size:0.9rem;">
-            <input type="text" value="${escapeHtml(exp.location)}" onchange="updateExperience(${index}, 'location', this.value)" placeholder="Location*" style="width:100%;padding:8px 12px;background:rgba(0,0,0,0.1);border:1px solid var(--border);border-radius:6px;color:var(--text-main);margin-bottom:0.5rem;font-size:0.9rem;">
-            <div style="margin-bottom:0.5rem;">
-                <label style="display:block;margin-bottom:0.5rem;font-weight:500;font-size:0.85rem;color:var(--text-dim);">Duties & Responsibilities*</label>
-                <div id="duties-${index}" style="margin-bottom:0.5rem;"></div>
-                <input type="text" id="newDuty-${index}" placeholder="Add new duty..." style="width:100%;padding:8px 12px;background:rgba(0,0,0,0.1);border:1px solid var(--border);border-radius:6px;color:var(--text-main);margin-bottom:0.5rem;font-size:0.9rem;">
-                <button onclick="addDuty(${index})" style="background:var(--accent);color:white;border:none;padding:6px 12px;border-radius:6px;font-size:0.85rem;cursor:pointer;transition:all 0.3s ease;width:100%;"><i class="fas fa-plus" style="margin-right:6px;"></i>Add Duty</button>
-            </div>
-            <small id="expError-${index}" style="color:#ef4444;display:none;"></small>
-        `;
-
-        const dutiesDiv = container.querySelector(`#duties-${index}`);
-        exp.duties.forEach((duty, dutyIdx) => {
-            const dutyEl = document.createElement('div');
-            dutyEl.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:0.5rem;';
-            dutyEl.innerHTML = `
-                <input type="text" value="${escapeHtml(duty)}" onchange="updateDuty(${index}, ${dutyIdx}, this.value)" placeholder="Duty description..." style="flex:1;padding:6px 10px;background:rgba(0,0,0,0.2);border:1px solid var(--border);border-radius:6px;color:var(--text-main);font-size:0.85rem;">
-                <button onclick="removeDuty(${index}, ${dutyIdx})" style="background:#ef4444;color:white;border:none;padding:6px 10px;border-radius:6px;cursor:pointer;font-size:0.85rem;"><i class="fas fa-trash"></i></button>
-            `;
-            dutiesDiv.appendChild(dutyEl);
+                <input class="_i" placeholder="Project Title*" value="${esc(p.title)}" oninput="workingData.projects[${i}].title=this.value">
+                <textarea class="_i" rows="2" oninput="workingData.projects[${i}].description=this.value">${esc(p.description)}</textarea>
+                <input class="_i" placeholder="URL (optional)" type="url" value="${esc(p.link)}" oninput="workingData.projects[${i}].link=this.value">
+                <input class="_i" placeholder="Link label (optional)" value="${esc(p.linkText)}" oninput="workingData.projects[${i}].linkText=this.value">`;
+            el.appendChild(d);
         });
-
-        return container;
     }
 
-    window.addDuty = function(expIndex) {
-        const input = document.getElementById(`newDuty-${expIndex}`);
-        const duty = input.value.trim();
-
-        if (!duty) {
-            showToast('Duty cannot be empty', 'error');
-            return;
-        }
-        if (duty.length < CONFIG.VALIDATION_RULES.minDutyLength) {
-            showToast(`Duty must be at least ${CONFIG.VALIDATION_RULES.minDutyLength} characters`, 'error');
-            return;
-        }
-
-        resumeData.experience[expIndex].duties.push(duty);
-        input.value = '';
-        window.loadResumeEditor();
-    };
-
-    window.removeDuty = function(expIndex, dutyIndex) {
-        resumeData.experience[expIndex].duties.splice(dutyIndex, 1);
-        window.loadResumeEditor();
-    };
-
-    window.updateDuty = function(expIndex, dutyIndex, value) {
-        resumeData.experience[expIndex].duties[dutyIndex] = value;
-    };
-
-    window.updateExperience = function(index, field, value) {
-        resumeData.experience[index][field] = value;
-    };
-
-    window.removeExperience = function(index) {
-        resumeData.experience.splice(index, 1);
-        window.loadResumeEditor();
-    };
-
-    window.addExperience = function() {
-        resumeData.experience.push({
-            position: '',
-            duration: '',
-            location: '',
-            duties: []
+    function renderEduList() {
+        const el = document.getElementById('_eduList'); if (!el) return;
+        el.innerHTML = '';
+        workingData.education.forEach((edu, i) => {
+            const d = document.createElement('div'); d.className = '_sc';
+            d.innerHTML = `
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                    <strong style="color:var(--accent);">Education ${i+1}</strong>
+                    <button class="_bdel" onclick="_E.remEdu(${i})"><i class="fas fa-trash"></i> Remove</button>
+                </div>
+                <input class="_i" placeholder="Degree*" value="${esc(edu.degree)}" oninput="workingData.education[${i}].degree=this.value">
+                <input class="_i" placeholder="School / University*" value="${esc(edu.school)}" oninput="workingData.education[${i}].school=this.value">`;
+            el.appendChild(d);
         });
-        window.loadResumeEditor();
-    };
-
-    function createEducationEditor(index, edu) {
-        const container = document.createElement('div');
-        container.style.cssText = 'background:rgba(0,0,0,0.1);padding:1rem;border-radius:8px;margin-bottom:1rem;border:1px solid var(--border);';
-        container.innerHTML = `
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
-                <h6 style="margin:0;color:var(--accent);font-weight:600;">Education ${index + 1}</h6>
-                <button onclick="removeEducation(${index})" style="background:#ef4444;color:white;border:none;padding:6px 12px;border-radius:6px;font-size:0.85rem;cursor:pointer;transition:all 0.3s ease;"><i class="fas fa-trash"></i> Remove</button>
-            </div>
-            <input type="text" value="${escapeHtml(edu.degree)}" onchange="updateEducation(${index}, 'degree', this.value)" placeholder="Degree*" style="width:100%;padding:8px 12px;background:rgba(0,0,0,0.1);border:1px solid var(--border);border-radius:6px;color:var(--text-main);margin-bottom:0.5rem;font-size:0.9rem;">
-            <input type="text" value="${escapeHtml(edu.school)}" onchange="updateEducation(${index}, 'school', this.value)" placeholder="School/University*" style="width:100%;padding:8px 12px;background:rgba(0,0,0,0.1);border:1px solid var(--border);border-radius:6px;color:var(--text-main);margin-bottom:0.5rem;font-size:0.9rem;">
-            <small id="eduError-${index}" style="color:#ef4444;display:none;"></small>
-        `;
-        return container;
     }
 
-    window.updateEducation = function(index, field, value) {
-        resumeData.education[index][field] = value;
+    /* Editor action object - referenced by inline onclick */
+    window.workingData = null;
+    window._E = {
+        addSkill(type) {
+            const inp = document.getElementById('_ns-'+type);
+            const v = inp ? inp.value.trim() : '';
+            if (!v || v.length < CONFIG.VALIDATION.minSkill) { toast('Skill too short (min '+CONFIG.VALIDATION.minSkill+' chars).','error'); return; }
+            if (((workingData.skills||{})[type]||[]).length >= CONFIG.VALIDATION.maxSkills) { toast('Max skills reached.','error'); return; }
+            workingData.skills[type].push(v);
+            if (inp) inp.value = '';
+            reRenderSkills(type);
+        },
+        remSkill(type, i) { workingData.skills[type].splice(i,1); reRenderSkills(type); },
+        addExp() { workingData.experience.push({position:'',duration:'',location:'',duties:[]}); renderExpList(); },
+        remExp(i) { workingData.experience.splice(i,1); renderExpList(); },
+        addDuty(ei) {
+            const inp = document.getElementById('_nd-'+ei);
+            const v = inp ? inp.value.trim() : '';
+            if (!v || v.length < CONFIG.VALIDATION.minDuty) { toast('Duty too short.','error'); return; }
+            if ((workingData.experience[ei].duties||[]).length >= CONFIG.VALIDATION.maxDuties) { toast('Max duties reached.','error'); return; }
+            workingData.experience[ei].duties.push(v);
+            if (inp) inp.value = '';
+            renderDuties(ei);
+        },
+        remDuty(ei,di) { workingData.experience[ei].duties.splice(di,1); renderDuties(ei); },
+        addProj() { workingData.projects.push({title:'',description:'',link:'',linkText:''}); renderProjList(); },
+        remProj(i) { workingData.projects.splice(i,1); renderProjList(); },
+        addEdu() { workingData.education.push({degree:'',school:''}); renderEduList(); },
+        remEdu(i) { workingData.education.splice(i,1); renderEduList(); }
     };
 
-    window.removeEducation = function(index) {
-        resumeData.education.splice(index, 1);
-        window.loadResumeEditor();
-    };
-
-    window.addEducation = function() {
-        resumeData.education.push({ degree: '', school: '' });
-        window.loadResumeEditor();
-    };
-
-    function createProjectEditor(index, project) {
-        const container = document.createElement('div');
-        container.style.cssText = 'background:rgba(0,0,0,0.1);padding:1rem;border-radius:8px;margin-bottom:1rem;border:1px solid var(--border);';
-        container.innerHTML = `
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
-                <h6 style="margin:0;color:var(--accent);font-weight:600;">Project ${index + 1}</h6>
-                <button onclick="removeProject(${index})" style="background:#ef4444;color:white;border:none;padding:6px 12px;border-radius:6px;font-size:0.85rem;cursor:pointer;transition:all 0.3s ease;"><i class="fas fa-trash"></i> Remove</button>
-            </div>
-            <input type="text" value="${escapeHtml(project.title)}" onchange="updateProject(${index}, 'title', this.value)" placeholder="Project Title*" style="width:100%;padding:8px 12px;background:rgba(0,0,0,0.1);border:1px solid var(--border);border-radius:6px;color:var(--text-main);margin-bottom:0.5rem;font-size:0.9rem;">
-            <textarea onchange="updateProject(${index}, 'description', this.value)" placeholder="Project Description*" style="width:100%;padding:8px 12px;background:rgba(0,0,0,0.1);border:1px solid var(--border);border-radius:6px;color:var(--text-main);margin-bottom:0.5rem;font-size:0.9rem;min-height:60px;resize:vertical;font-family:inherit;line-height:1.6;">${escapeHtml(project.description)}</textarea>
-            <input type="url" value="${escapeHtml(project.link)}" onchange="updateProject(${index}, 'link', this.value)" placeholder="Project Link (optional)" style="width:100%;padding:8px 12px;background:rgba(0,0,0,0.1);border:1px solid var(--border);border-radius:6px;color:var(--text-main);margin-bottom:0.5rem;font-size:0.9rem;">
-            <input type="text" value="${escapeHtml(project.linkText)}" onchange="updateProject(${index}, 'linkText', this.value)" placeholder="Link Text (optional)" style="width:100%;padding:8px 12px;background:rgba(0,0,0,0.1);border:1px solid var(--border);border-radius:6px;color:var(--text-main);margin-bottom:0.5rem;font-size:0.9rem;">
-            <small id="projectError-${index}" style="color:#ef4444;display:none;"></small>
-        `;
-        return container;
+    function collectForm() {
+        const pi = workingData.personalInfo;
+        const g = id => (document.getElementById(id)||{}).value;
+        pi.name     = g('ei-name')     || pi.name;
+        pi.title    = g('ei-title')    || pi.title;
+        pi.email    = g('ei-email')    || pi.email;
+        pi.phone    = g('ei-phone')    || pi.phone;
+        pi.location = g('ei-location') || pi.location;
+        pi.wfh      = g('ei-wfh')      || pi.wfh;
+        pi.linkedin = g('ei-linkedin') || pi.linkedin;
+        workingData.summary   = g('ei-summary')   || workingData.summary;
+        workingData.strengths = g('ei-strengths') || workingData.strengths;
     }
 
-    window.updateProject = function(index, field, value) {
-        resumeData.projects[index][field] = value;
+    /* ===================== MODAL HELPERS ===================== */
+    function makeModal(id, bdId, titleHTML, bodyId, footHTML, maxW) {
+        const bd = document.createElement('div');
+        bd.id = bdId;
+        bd.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.78);backdrop-filter:blur(8px);z-index:10000;opacity:0;visibility:hidden;transition:opacity 0.32s,visibility 0.32s;';
+        document.body.appendChild(bd);
+
+        const m = document.createElement('div');
+        m.id = id;
+        m.style.cssText = `position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) scale(0.92);width:95%;max-width:${maxW||1000}px;max-height:92vh;background:var(--card-bg);border:1px solid var(--border);border-radius:16px;z-index:10001;opacity:0;visibility:hidden;transition:all 0.32s cubic-bezier(0.34,1.56,0.64,1);overflow:hidden;display:flex;flex-direction:column;box-shadow:0 25px 60px rgba(0,0,0,0.45);`;
+        m.innerHTML = `
+            <div style="padding:1.2rem 1.7rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;background:linear-gradient(135deg,rgba(var(--accent-rgb),0.08),transparent);flex-shrink:0;">
+                <h4 style="margin:0;color:var(--accent);font-weight:700;font-size:1.05rem;">${titleHTML}</h4>
+                <button onclick="_closeM('${id}','${bdId}')" style="background:none;border:none;color:var(--text-dim);font-size:1.5rem;cursor:pointer;width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;transition:background 0.2s;" onmouseover="this.style.background='rgba(0,0,0,0.1)'" onmouseout="this.style.background='none'">&times;</button>
+            </div>
+            <div id="${bodyId}" style="flex:1;overflow-y:auto;padding:1.4rem 1.7rem;"></div>
+            <div style="padding:1.2rem 1.7rem;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:10px;background:rgba(0,0,0,0.04);flex-shrink:0;flex-wrap:wrap;">
+                ${footHTML}
+            </div>`;
+        document.body.appendChild(m);
+        bd.addEventListener('click', () => window._closeM(id, bdId));
+        return m;
+    }
+
+    window._openM = function(id, bdId) {
+        const m = document.getElementById(id), bd = document.getElementById(bdId);
+        if (m && bd) { bd.style.opacity='1'; bd.style.visibility='visible'; m.style.opacity='1'; m.style.visibility='visible'; m.style.transform='translate(-50%,-50%) scale(1)'; }
+    };
+    window._closeM = function(id, bdId) {
+        const m = document.getElementById(id), bd = document.getElementById(bdId);
+        if (m && bd) { bd.style.opacity='0'; bd.style.visibility='hidden'; m.style.opacity='0'; m.style.visibility='hidden'; m.style.transform='translate(-50%,-50%) scale(0.92)'; }
     };
 
-    window.removeProject = function(index) {
-        resumeData.projects.splice(index, 1);
-        window.loadResumeEditor();
+    /* ===================== OPEN EDITORS ===================== */
+    window.openResumeEditor = function () {
+        if (!isAuth) { toast('Please sign in first.','error'); return; }
+        workingData = deepClone(AppCore.getResumeData());
+        window.workingData = workingData;
+        const body = document.getElementById('_rmBody');
+        if (body) { body.innerHTML = buildEditorHTML(); renderExpList(); renderProjList(); renderEduList(); }
+        window._openM('_rm','_rmBd');
     };
 
-    window.addProject = function() {
-        resumeData.projects.push({
-            title: '',
-            description: '',
-            link: '',
-            linkText: ''
-        });
-        window.loadResumeEditor();
+    window.openCLEditor = function () {
+        if (!isAuth) { toast('Please sign in first.','error'); return; }
+        const ta = document.getElementById('_clTA');
+        if (ta) ta.value = AppCore.getCoverLetterContent() || defaultCL();
+        window._openM('_cl','_clBd');
     };
 
-    // ==================== SAVE FUNCTIONS ====================
-    window.saveResume = async function() {
-        showToast('Validating resume data...', 'info');
+    function defaultCL() {
+        const d = AppCore.getResumeData() || {};
+        const pi = d.personalInfo || {};
+        return `${pi.name||'Christopher Lee Cajes'}
+${[pi.email,pi.phone,pi.location].filter(Boolean).join(' | ')}
 
-        const validation = Validator.validateAllData();
-        if (validation.hasErrors) {
-            const errorMessages = Object.entries(validation.errors)
-                .filter(([_, errors]) => errors.length > 0)
-                .map(([section, errors]) => `${section}: ${errors[0]}`)
-                .join('\n');
-            showToast('Validation errors:\n' + errorMessages, 'error');
-            return;
-        }
+[Date]
 
-        // Update summary and strengths
-        resumeData.summary = document.getElementById('editSummary').value;
-        resumeData.strengths = document.getElementById('editStrengths').value;
+Hiring Manager
+[Company Name]
+[Company Address]
 
-        // Save to persistent storage
-        await Storage.saveData(CONFIG.STORAGE_KEY, resumeData);
+Dear Hiring Manager,
 
-        // Update page content
-        updatePageContent();
+I am writing to express my interest in the [Position] role at [Company Name]. With over 8 years of professional experience specializing in C#, ASP.NET Core, and full-stack development, I am confident in my ability to contribute significantly to your team.
 
-        // Generate and update PDF
+Throughout my career, I have developed enterprise-level applications, secure REST APIs, and robust backend systems for various industries including banking and finance. My technical expertise spans multiple programming languages and frameworks, allowing me to adapt quickly to different technology stacks and project requirements.
+
+What sets me apart is my commitment to code quality, system stability, and fostering positive team collaboration. I thrive in remote work environments and am passionate about creating solutions that drive business success.
+
+I would welcome the opportunity to discuss how my background and enthusiasm would be an excellent match for this position. Thank you for considering my application.
+
+Sincerely,
+${pi.name||'Christopher Lee Cajes'}`;
+    }
+
+    /* ===================== SAVE ACTIONS ===================== */
+    window.saveResume = async function () {
+        collectForm();
+        const errs = validateAll(workingData);
+        if (errs.length) { toast('Fix these:\n'+errs.slice(0,3).join('\n'),'error'); return; }
+        AppCore.setResumeData(deepClone(workingData));
+        toast('Generating PDF…','info');
         try {
-            showToast('Generating PDF...', 'info');
-            const pdfDoc = await generateCompletePDF();
-            const pdfBytes = await pdfDoc.save();
-            const blob = new Blob([pdfBytes], { type: 'application/pdf' });
-            
-            // Update the PDF file
-            updatePDFFile(blob, 'Resume - Christopher Lee Cajes.pdf');
-            
-            showToast('✓ Resume saved successfully!', 'success');
-            closeEditModal('resume');
-        } catch (error) {
-            console.error('PDF generation error:', error);
-            showToast('Error generating PDF: ' + error.message, 'error');
-        }
+            const pdfDoc = await generateResumePDF(workingData);
+            const blob = new Blob([await pdfDoc.save()], {type:'application/pdf'});
+            const fn = 'Resume - Christopher Lee Cajes.pdf';
+            downloadBlob(blob, fn);
+            updateDownloadLink('downloadResumeBtn', blob, fn);
+            toast('✓ Resume saved & PDF downloaded!','success');
+            window._closeM('_rm','_rmBd');
+        } catch(e) { toast('PDF error: '+e.message,'error'); }
     };
 
-    window.saveCoverLetter = async function() {
-        const content = document.getElementById('coverLetterContent').value;
-        const error = document.getElementById('coverLetterError');
-
-        const validation = Validator.isValidText(content, 50, 5000);
-        if (!validation.valid) {
-            error.textContent = validation.error;
-            error.style.display = 'block';
-            return;
-        }
-
+    window.saveCoverLetter = async function () {
+        const ta = document.getElementById('_clTA');
+        const content = ta ? ta.value : '';
+        if (!content.trim() || content.trim().length < 50) { toast('Cover letter too short (min 50 chars).','error'); return; }
+        AppCore.saveCoverLetterContent(content);
+        toast('Generating PDF…','info');
         try {
-            showToast('Generating Cover Letter PDF...', 'info');
             const pdfDoc = await generateCoverLetterPDF(content);
-            const pdfBytes = await pdfDoc.save();
-            const blob = new Blob([pdfBytes], { type: 'application/pdf' });
-            
-            // Update the PDF file
-            updatePDFFile(blob, 'Cover Letter - Christopher Lee Cajes.pdf');
-            
-            // Save cover letter content to localStorage
-            await Storage.saveData('coverLetterContent', content);
-            
-            showToast('✓ Cover Letter saved successfully!', 'success');
-            closeEditModal('coverletter');
-        } catch (error) {
-            console.error('Cover letter PDF error:', error);
-            showToast('Error generating PDF: ' + error.message, 'error');
-        }
+            const blob = new Blob([await pdfDoc.save()], {type:'application/pdf'});
+            const fn = 'Cover Letter - Christopher Lee Cajes.pdf';
+            downloadBlob(blob, fn);
+            updateDownloadLink('downloadCoverLetterBtn', blob, fn);
+            toast('✓ Cover letter saved & PDF downloaded!','success');
+            window._closeM('_cl','_clBd');
+        } catch(e) { toast('PDF error: '+e.message,'error'); }
     };
 
-    window.loadCoverLetterContent = function() {
-        const textarea = document.getElementById('coverLetterContent');
-        const saved = Storage.loadData('coverLetterContent');
-        if (saved) {
-            textarea.value = saved;
-        }
-    };
+    /* ===================== AUTH ===================== */
+    function createAuthModal() {
+        if (document.getElementById('_authM')) return;
+        const bd = document.createElement('div');
+        bd.id = '_authBd';
+        bd.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.82);backdrop-filter:blur(10px);z-index:20000;opacity:0;visibility:hidden;transition:opacity 0.3s,visibility 0.3s;';
+        document.body.appendChild(bd);
 
-    // ==================== AUTHENTICATION ====================
-    function handlePasswordAuth() {
-        const password = prompt('Enter edit password:');
-        if (password === CONFIG.EDIT_PASSWORD) {
-            isAuthenticated = true;
-            loadResumeDataFromPage();
-            document.getElementById('authBtn').style.display = 'none';
-            document.getElementById('editResumeBtn').style.display = 'flex';
-            document.getElementById('editCoverLetterBtn').style.display = 'flex';
-            document.getElementById('userInfo').style.display = 'flex';
-            showToast('✓ Successfully authenticated!', 'success');
-        } else if (password !== null) {
-            showToast('✗ Incorrect password!', 'error');
+        const m = document.createElement('div');
+        m.id = '_authM';
+        m.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) scale(0.9);width:90%;max-width:360px;background:var(--card-bg);border:1px solid var(--border);border-radius:16px;z-index:20001;padding:2rem;opacity:0;visibility:hidden;transition:all 0.38s cubic-bezier(0.34,1.56,0.64,1);box-shadow:0 25px 60px rgba(0,0,0,0.5);';
+        m.innerHTML = `
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:1.5rem;">
+                <div style="width:42px;height:42px;background:linear-gradient(135deg,#ef4444,#b91c1c);border-radius:11px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                    <i class="fas fa-lock" style="color:#fff;font-size:1rem;"></i>
+                </div>
+                <div>
+                    <h4 style="margin:0;color:var(--text-main);font-size:1rem;font-weight:700;">Authentication</h4>
+                    <p style="margin:0;color:var(--text-dim);font-size:0.78rem;">Enter password to edit</p>
+                </div>
+            </div>
+            <input type="password" id="_authInp" placeholder="Password"
+                style="width:100%;padding:10px 13px;background:rgba(0,0,0,0.1);border:1px solid var(--border);border-radius:8px;color:var(--text-main);font-size:0.9rem;outline:none;margin-bottom:1rem;transition:border-color 0.2s;box-sizing:border-box;"
+                onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'">
+            <p id="_authErr" style="color:#ef4444;font-size:0.78rem;display:none;margin-bottom:0.75rem;"></p>
+            <div style="display:flex;gap:10px;">
+                <button onclick="_cancelAuth()" style="flex:1;padding:9px;background:transparent;border:1px solid var(--border);border-radius:8px;color:var(--text-dim);cursor:pointer;font-weight:600;transition:all 0.2s;">Cancel</button>
+                <button onclick="_submitAuth()" style="flex:2;padding:9px;background:linear-gradient(135deg,#ef4444,#b91c1c);border:none;border-radius:8px;color:#fff;cursor:pointer;font-weight:600;box-shadow:0 4px 12px rgba(239,68,68,0.3);">Sign In</button>
+            </div>`;
+        document.body.appendChild(m);
+
+        setTimeout(() => {
+            bd.style.opacity='1'; bd.style.visibility='visible';
+            m.style.opacity='1'; m.style.visibility='visible'; m.style.transform='translate(-50%,-50%) scale(1)';
+            const inp = document.getElementById('_authInp');
+            if (inp) inp.focus();
+        }, 10);
+
+        bd.addEventListener('click', () => window._cancelAuth());
+        const inp2 = document.getElementById('_authInp');
+        if (inp2) {
+            inp2.addEventListener('keydown', e => {
+                if (e.key === 'Enter') window._submitAuth();
+                if (e.key === 'Escape') window._cancelAuth();
+            });
         }
     }
 
-    // ==================== INITIALIZATION ====================
-    document.addEventListener('DOMContentLoaded', () => {
-        createEditButtons();
-        createModals();
-    });
+    window._cancelAuth = function () {
+        const b = document.getElementById('_authBd'), m = document.getElementById('_authM');
+        if (b) { b.style.opacity='0'; b.style.visibility='hidden'; }
+        if (m) { m.style.opacity='0'; m.style.visibility='hidden'; setTimeout(()=>{ b&&b.remove(); m&&m.remove(); },350); }
+    };
+
+    window._submitAuth = async function () {
+        const inp = document.getElementById('_authInp');
+        const errEl = document.getElementById('_authErr');
+        if (!inp) return;
+        const hash = await sha256(inp.value);
+        if (hash === CONFIG.EDIT_HASH) {
+            isAuth = true;
+            window._cancelAuth();
+            document.getElementById('_authBtn').style.display = 'none';
+            document.getElementById('_editRBtn').style.display = 'flex';
+            document.getElementById('_editCLBtn').style.display = 'flex';
+            document.getElementById('_authBadge').style.display = 'flex';
+            toast('✓ Authenticated!','success');
+        } else {
+            inp.style.borderColor = '#ef4444';
+            inp.value = '';
+            if (errEl) { errEl.textContent = 'Incorrect password.'; errEl.style.display = 'block'; }
+            setTimeout(() => { inp.style.borderColor = 'var(--border)'; }, 2000);
+        }
+    };
+
+    /* ===================== SETUP ===================== */
+    function setup() {
+        injectStyles();
+
+        // Floating auth button
+        const authBtn = document.createElement('button');
+        authBtn.id = '_authBtn';
+        authBtn.innerHTML = '<i class="fas fa-lock me-1"></i> Sign In to Edit';
+        authBtn.style.cssText = 'position:fixed;right:20px;top:20px;z-index:9999;border:none;border-radius:50px;padding:10px 22px;font-weight:600;font-size:0.82rem;cursor:pointer;transition:all 0.3s;box-shadow:0 4px 15px rgba(239,68,68,0.3);display:flex;align-items:center;gap:8px;background:linear-gradient(135deg,#ef4444,#b91c1c);color:#fff;';
+        authBtn.onclick = createAuthModal;
+        document.body.appendChild(authBtn);
+
+        // Edit Resume button
+        const editRBtn = document.createElement('button');
+        editRBtn.id = '_editRBtn';
+        editRBtn.innerHTML = '<i class="fas fa-pen me-1"></i> Edit Resume';
+        editRBtn.style.cssText = 'position:fixed;right:20px;top:20px;z-index:9999;border:none;border-radius:50px;padding:10px 22px;font-weight:600;font-size:0.82rem;cursor:pointer;transition:all 0.3s;display:none;align-items:center;gap:8px;background:linear-gradient(135deg,var(--accent),#0ea5e9);color:#fff;box-shadow:0 4px 15px rgba(var(--accent-rgb),0.3);';
+        editRBtn.onclick = openResumeEditor;
+        document.body.appendChild(editRBtn);
+
+        // Edit Cover Letter button
+        const editCLBtn = document.createElement('button');
+        editCLBtn.id = '_editCLBtn';
+        editCLBtn.innerHTML = '<i class="fas fa-file-alt me-1"></i> Edit Cover Letter';
+        editCLBtn.style.cssText = 'position:fixed;right:20px;top:72px;z-index:9999;border:none;border-radius:50px;padding:10px 22px;font-weight:600;font-size:0.82rem;cursor:pointer;transition:all 0.3s;display:none;align-items:center;gap:8px;background:linear-gradient(135deg,#a855f7,#7c3aed);color:#fff;box-shadow:0 4px 15px rgba(168,85,247,0.3);';
+        editCLBtn.onclick = openCLEditor;
+        document.body.appendChild(editCLBtn);
+
+        // Auth badge
+        const badge = document.createElement('div');
+        badge.id = '_authBadge';
+        badge.innerHTML = '<i class="fas fa-check-circle me-1"></i> Authenticated';
+        badge.style.cssText = 'position:fixed;right:20px;top:126px;z-index:9999;display:none;align-items:center;gap:6px;padding:5px 12px;background:rgba(34,197,94,0.1);border:1px solid #22c55e;border-radius:20px;font-size:0.75rem;color:#22c55e;';
+        document.body.appendChild(badge);
+
+        // Resume modal
+        makeModal('_rm','_rmBd',
+            '<i class="fas fa-pen-to-square me-2"></i>Edit Resume',
+            '_rmBody',
+            `<button onclick="_closeM('_rm','_rmBd')" style="padding:9px 22px;background:transparent;border:1px solid var(--border);border-radius:8px;color:var(--text-dim);cursor:pointer;font-weight:600;">Cancel</button>
+             <button onclick="saveResume()" style="padding:9px 22px;background:linear-gradient(135deg,var(--accent),#0ea5e9);color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600;"><i class="fas fa-save me-1"></i>Save & Generate PDF</button>`
+        );
+
+        // Cover Letter modal
+        makeModal('_cl','_clBd',
+            '<i class="fas fa-file-alt me-2"></i>Edit Cover Letter',
+            '_clBody',
+            `<button onclick="_closeM('_cl','_clBd')" style="padding:9px 22px;background:transparent;border:1px solid var(--border);border-radius:8px;color:var(--text-dim);cursor:pointer;font-weight:600;">Cancel</button>
+             <button onclick="saveCoverLetter()" style="padding:9px 22px;background:linear-gradient(135deg,#a855f7,#7c3aed);color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:600;"><i class="fas fa-save me-1"></i>Save & Generate PDF</button>`,
+            800
+        );
+
+        const clBody = document.getElementById('_clBody');
+        if (clBody) {
+            clBody.innerHTML = `
+                <label style="display:block;font-size:0.78rem;font-weight:600;color:var(--text-dim);margin-bottom:6px;">
+                    <i class="fas fa-info-circle me-1"></i> Plain text. Line breaks are preserved in the PDF.
+                </label>
+                <textarea id="_clTA" class="_i" style="min-height:420px;font-family:monospace;font-size:0.875rem;line-height:1.7;" placeholder="Your cover letter..."></textarea>`;
+        }
+
+        // ESC key closes any open modal
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape') {
+                window._closeM('_rm','_rmBd');
+                window._closeM('_cl','_clBd');
+                window._cancelAuth && window._cancelAuth();
+            }
+        });
+    }
+
+    document.addEventListener('DOMContentLoaded', setup);
 
 })();
+

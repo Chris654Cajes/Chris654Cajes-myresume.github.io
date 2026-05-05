@@ -1,0 +1,176 @@
+{
+  "personalInfo": {
+    "name": "Christopher Lee Cajes",
+    "title": "Senior Software Developer",
+    "email": "clcajes@gmail.com",
+    "phone": "+63 968 581 6796",
+    "location": "Philippines",
+    "wfh": "Open to Permanent WFH",
+    "linkedin": "https://www.linkedin.com/in/christopher-lee-cajes-b063962b6/"
+  },
+  "summary": "Senior Software Developer with 8+ years of professional experience specializing in C#, ASP.NET Core (Web & API), WinForms, and SQL Server-based systems. Strong background in building enterprise and financial applications, developing secure REST APIs, and supporting business-critical systems. Proven ability to work effectively in structured teams and remote environments, with a focus on code quality, system stability, and positive work culture.",
+  "skills": {
+    "primaryStack": [
+      "C#",
+      "ASP.NET Core (Web & API)",
+      "ASP.NET MVC / .NET Framework",
+      "WinForms (Desktop)",
+      "PHP Laravel",
+      "Python",
+      "Django",
+      "Ruby",
+      "Ruby on Rails",
+      "C++",
+      "TypeScript",
+      "Java Spring Boot",
+      "Java & GUI Development",
+      "Node.js",
+      "RESTful API Design",
+      "Entity Framework",
+      "Class Library Development",
+      "Console Applications"
+    ],
+    "databases": [
+      "SQL Server",
+      "MySQL",
+      "PostgreSQL",
+      "Oracle DB",
+      "SQLite",
+      "Git / Source Control",
+      "Visual Studio / VS Code",
+      "Postman",
+      "Blue Prism (RPA)",
+      "Xcode (Swift)"
+    ],
+    "frontend": [
+      "HTML / CSS",
+      "Bootstrap",
+      "Tailwind CSS",
+      "JavaScript / jQuery",
+      "TypeScript",
+      "Vue.js",
+      "AngularJS",
+      "React JS (Working Knowledge)",
+      "Node.js",
+      "Android Studio (Java)",
+      "Mobile UI/UX Implementation",
+      "REST API Integration"
+    ],
+    "multimedia": [
+      "Unity 3D",
+      "Unreal Engine",
+      "Autodesk Maya",
+      "Blender",
+      "Adobe Photoshop"
+    ]
+  },
+  "experience": [
+    {
+      "position": "Systems Analyst II | Rizal Commercial Banking Corporation (RCBC)",
+      "duration": "Nov 2025 – Feb 2026",
+      "location": "Taguig City",
+      "duties": [
+        "Developed and maintained ASP.NET Core Web applications supporting internal banking systems.",
+        "Built and enhanced C# console applications for internal automation and system support.",
+        "Collaborated with analysts and developers to ensure system reliability and compliance."
+      ]
+    },
+    {
+      "position": "Programmer / Analyst | Vertere Global Solutions Inc.",
+      "duration": "Apr 2025 – Oct 2025",
+      "location": "Taguig City",
+      "duties": [
+        "Developed ASP.NET Core Web applications and APIs for business clients.",
+        "Participated in system analysis, implementation, and support of production applications.",
+        "Ensured clean code practices and proper data handling using SQL Server."
+      ]
+    },
+    {
+      "position": "Full Stack Web Developer | Quantrics Enterprises Inc.",
+      "duration": "Nov 2023 – Feb 2025",
+      "location": "Taytay, Rizal",
+      "duties": [
+        "Developed web applications using ASP.NET Core API and React JS.",
+        "Implemented REST APIs consumed by frontend applications."
+      ]
+    },
+    {
+      "position": "Web Developer | Quantrics Enterprises Inc.",
+      "duration": "Dec 2021 – Oct 2023",
+      "location": "Taytay, Rizal",
+      "duties": [
+        "Designed and developed responsive websites using HTML, CSS, Bootstrap, JavaScript, and jQuery.",
+        "Maintained and enhanced existing systems based on business requirements."
+      ]
+    },
+    {
+      "position": "Application Developer | Quantrics Enterprises Inc.",
+      "duration": "Nov 2018 – Nov 2021",
+      "location": "Taytay, Rizal",
+      "duties": [
+        "Developed ASP.NET Core APIs to support automation and internal tools.",
+        "Implemented Robotic Process Automation (RPA) solutions using Blue Prism.",
+        "Integrated APIs with business processes to improve operational efficiency."
+      ]
+    },
+    {
+      "position": "Software Developer | Capital Power Global, Ltd.",
+      "duration": "May 2017 – Aug 2018",
+      "location": "Makati City",
+      "duties": [
+        "Developed ASP.NET (Framework & Core) Web Applications and Web APIs.",
+        "Created C# Class Libraries to support modular and reusable codebases.",
+        "Designed and managed databases using SQL Server."
+      ]
+    }
+  ],
+  "education": [
+    {
+      "degree": "Master of Information Technology (Systems Development)",
+      "school": "Ateneo de Naga University | March 2017"
+    },
+    {
+      "degree": "Bachelor of Science in Information Technology",
+      "school": "Ateneo de Naga University | March 2015"
+    }
+  ],
+  "projects": [
+    {
+      "title": "La-Fierce - Social Media Mobile App",
+      "description": "Created a full-featured social media application using Android Studio. Developed a robust backend using C# API and SQL Server for data management.",
+      "link": "https://chris654cajes.github.io/lafierce.github.io/",
+      "linkText": "App Introduction (Website)"
+    },
+    {
+      "title": "La-Fierce - Admin",
+      "description": "Created a separate administrative interface for managing the La-Fierce famous successful people.",
+      "link": "",
+      "linkText": "Platform: Windows Forms C#, Android & Website"
+    },
+    {
+      "title": "SariKart - Online Grocery Shopping Mobile App",
+      "description": "Mobile application developed using Android Studio (Java). Backend powered by ASP.NET Web API for product and order management.",
+      "link": "",
+      "linkText": ""
+    },
+    {
+      "title": "Student Enrollment System - Minds That Matter Learning Center",
+      "description": "Desktop application developed using VB.NET / WinForms. Implemented student records management and enrollment workflows.",
+      "link": "",
+      "linkText": ""
+    },
+    {
+      "title": "Other Android Applications",
+      "description": "There are more Android applications developed.",
+      "link": "",
+      "linkText": "Technologies: Android Studio"
+    },
+    {
+      "title": "My Created Applications Portfolio Website",
+      "description": "",
+      "link": "http://www.my-creative-apps.somee.com/",
+      "linkText": "Website"
+    }
+  ],
+  "strengths": "Fast learner, highly adaptable, creative problem-solver, self-motivated, wellness-conscious, and open to feedback.\n\nWork Preferences: Permanent Work from Home, Philippines-based or offshore remote roles, emphasis on work-life balance and positive team culture."
+}

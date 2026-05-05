@@ -27,12 +27,14 @@
             --border: #e2e8f0;
         }
 
+        * { box-sizing: border-box; }
+
         body {
             background-color: var(--bg-body);
             color: var(--text-main);
             font-family: 'Inter', -apple-system, sans-serif;
             font-size: 0.88rem;
-            transition: all 0.3s ease;
+            transition: background-color 0.3s ease, color 0.3s ease;
             line-height: 1.6;
         }
 
@@ -45,27 +47,55 @@
             padding: 1.5rem;
             overflow-y: auto;
             z-index: 1000;
+            transition: background 0.3s ease, border-color 0.3s ease;
         }
 
         .theme-grid {
             display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 8px;
-            margin-bottom: 2rem;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 7px;
+            margin-bottom: 0.75rem;
             padding: 10px;
-            background: rgba(0,0,0,0.1);
-            border-radius: 8px;
+            background: rgba(0,0,0,0.08);
+            border-radius: 10px;
         }
         .theme-dot {
-            width: 24px;
-            height: 24px;
+            width: 26px;
+            height: 26px;
             border-radius: 50%;
             cursor: pointer;
             border: 2px solid transparent;
-            transition: transform 0.2s;
+            transition: transform 0.18s, box-shadow 0.18s;
         }
         .theme-dot:hover { transform: scale(1.2); }
-        .theme-dot.active { border-color: var(--text-main); }
+        .theme-dot.active {
+            box-shadow: 0 0 0 2px var(--bg-body), 0 0 0 4px var(--text-main);
+        }
+
+        .color-picker-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 1.5rem;
+            padding: 8px 10px;
+            background: rgba(0,0,0,0.08);
+            border-radius: 10px;
+        }
+        .color-picker-label {
+            font-size: 0.76rem;
+            color: var(--text-dim);
+            flex: 1;
+        }
+        #customColorPicker {
+            -webkit-appearance: none;
+            width: 36px;
+            height: 28px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            cursor: pointer;
+            padding: 1px 2px;
+            background: transparent;
+        }
 
         #content {
             margin-left: 280px;
@@ -78,7 +108,8 @@
             border-radius: 12px;
             padding: 1.5rem;
             margin-bottom: 1.5rem;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+            transition: background 0.3s ease, border-color 0.3s ease;
         }
 
         .section-title {
@@ -90,6 +121,7 @@
             margin-bottom: 1.2rem;
             display: flex;
             align-items: center;
+            transition: color 0.2s;
         }
         .section-title::after {
             content: "";
@@ -100,22 +132,28 @@
         }
 
         .skill-badge {
-            background: rgba(var(--accent-rgb), 0.1);
-            border: 1px solid var(--accent);
-            color: var(--text-main);
-            padding: 2px 10px;
-            border-radius: 4px;
-            margin: 0 4px 6px 0;
             display: inline-block;
-            font-size: 0.75rem;
+            background: rgba(var(--accent-rgb), 0.1);
+            color: var(--accent);
+            border: 1px solid rgba(var(--accent-rgb), 0.3);
+            border-radius: 6px;
+            padding: 3px 10px;
+            font-size: 0.78rem;
+            margin: 3px;
+            transition: background 0.2s, color 0.2s, border-color 0.2s;
         }
+
+        .text-accent { color: var(--accent) !important; transition: color 0.2s; }
+        .text-dim { color: var(--text-dim) !important; transition: color 0.2s; }
 
         .exp-item {
             position: relative;
             padding-left: 1.5rem;
             border-left: 2px solid var(--border);
             margin-bottom: 2rem;
+            transition: border-color 0.2s;
         }
+        .exp-item:last-child { margin-bottom: 0; }
         .exp-item::before {
             content: "";
             position: absolute;
@@ -125,6 +163,7 @@
             height: 12px;
             background: var(--accent);
             border-radius: 50%;
+            transition: background 0.2s;
         }
 
         .contact-pill {
@@ -137,307 +176,133 @@
             color: var(--text-dim);
             font-size: 0.85rem;
             border: 1px solid var(--border);
+            transition: color 0.2s, border-color 0.2s;
         }
         .contact-pill:hover { color: var(--accent); border-color: var(--accent); }
 
         ul { padding-left: 1rem; }
         li { margin-bottom: 0.4rem; }
 
-        /* Updated Mobile Logic */
         @media (max-width: 991px) {
-            #sidebar { 
+            #sidebar {
                 width: 100%;
                 height: auto;
                 position: relative;
                 border-right: none;
                 border-bottom: 1px solid var(--border);
             }
-            #content { 
-                margin-left: 0; 
-                padding: 1.5rem 1rem; 
-            }
-            .theme-grid {
-                grid-template-columns: repeat(8, 1fr);
-            }
+            #content { margin-left: 0; padding: 1.5rem 1rem; }
+            .theme-grid { grid-template-columns: repeat(9, 1fr); }
         }
     </style>
 </head>
-<body data-theme="light">
+<body data-theme="dark">
 
     <aside id="sidebar">
         <div class="mb-4 text-center">
-            <h5 class="fw-bold mb-1">Christopher Lee Cajes</h5>
-            <p class="small text-accent">Senior Software Developer</p>
+            <h5 class="fw-bold mb-1" id="sidebar-name">Christopher Lee Cajes</h5>
+            <p class="small text-accent" id="sidebar-title">Senior Software Developer</p>
         </div>
 
         <span class="section-title">Select Theme</span>
-        <div class="theme-grid">
-            <div class="theme-dot active" style="background: #38bdf8;" onclick="setTheme(this, '#38bdf8', '56, 189, 248')"></div>
-            <div class="theme-dot" style="background: #ef4444;" onclick="setTheme(this, '#ef4444', '239, 68, 68')"></div>
-            <div class="theme-dot" style="background: #f97316;" onclick="setTheme(this, '#f97316', '249, 115, 22')"></div>
-            <div class="theme-dot" style="background: #22c55e;" onclick="setTheme(this, '#22c55e', '34, 197, 94')"></div>
-            <div class="theme-dot" style="background: #a855f7;" onclick="setTheme(this, '#a855f7', '168, 85, 247')"></div>
-            <div class="theme-dot" style="background: #ec4899;" onclick="setTheme(this, '#ec4899', '236, 72, 153')"></div>
-            <div class="theme-dot" style="background: #ffffff; border: 1px solid #ccc;" onclick="toggleLightMode('light')"></div>
-            <div class="theme-dot" style="background: #000000;" onclick="toggleLightMode('dark')"></div>
+        <div class="theme-grid" id="themeGrid">
+            <div class="theme-dot active" style="background:#38bdf8;" data-accent="#38bdf8" data-rgb="56,189,248" title="Sky Blue"></div>
+            <div class="theme-dot" style="background:#ef4444;" data-accent="#ef4444" data-rgb="239,68,68" title="Red"></div>
+            <div class="theme-dot" style="background:#f97316;" data-accent="#f97316" data-rgb="249,115,22" title="Orange"></div>
+            <div class="theme-dot" style="background:#eab308;" data-accent="#eab308" data-rgb="234,179,8" title="Amber"></div>
+            <div class="theme-dot" style="background:#22c55e;" data-accent="#22c55e" data-rgb="34,197,94" title="Green"></div>
+            <div class="theme-dot" style="background:#14b8a6;" data-accent="#14b8a6" data-rgb="20,184,166" title="Teal"></div>
+            <div class="theme-dot" style="background:#6366f1;" data-accent="#6366f1" data-rgb="99,102,241" title="Indigo"></div>
+            <div class="theme-dot" style="background:#a855f7;" data-accent="#a855f7" data-rgb="168,85,247" title="Purple"></div>
+            <div class="theme-dot" style="background:#ec4899;" data-accent="#ec4899" data-rgb="236,72,153" title="Pink"></div>
+            <div class="theme-dot" style="background:#f43f5e;" data-accent="#f43f5e" data-rgb="244,63,94" title="Rose"></div>
+            <div class="theme-dot" style="background:#ffffff;border:1px solid #ccc;" data-mode="light" title="Light Mode"></div>
+            <div class="theme-dot" style="background:#0f172a;border:1px solid #334155;" data-mode="dark" title="Dark Mode"></div>
+        </div>
+
+        <div class="color-picker-row">
+            <span class="color-picker-label"><i class="fas fa-palette me-1"></i> Custom accent color</span>
+            <input type="color" id="customColorPicker" value="#38bdf8" title="Pick custom accent">
         </div>
 
         <span class="section-title">Contact</span>
-        <div class="mb-4">
-            <a href="mailto:clcajes@gmail.com" class="contact-pill"><i class="fas fa-envelope me-2"></i>clcajes@gmail.com</a>
-            <a href="tel:+639685816796" class="contact-pill"><i class="fas fa-phone me-2"></i>+63 968 581 6796</a>
-            <a href="https://www.linkedin.com/in/christopher-lee-cajes-b063962b6/" target="_blank" class="contact-pill"><i class="fab fa-linkedin me-2"></i>LinkedIn</a>
-            <div class="small text-dim mt-2 px-2"><i class="fas fa-map-marker-alt me-2"></i>Philippines</div>
-            <div class="small text-accent mt-2 px-2"><i class="fas fa-house-user me-2"></i>Open to Permanent WFH</div>
+        <div class="mb-4" id="sidebar-contact">
+            <a href="#" class="contact-pill" id="contact-email"><i class="fas fa-envelope me-2"></i><span id="contact-email-text">clcajes@gmail.com</span></a>
+            <a href="#" class="contact-pill" id="contact-phone"><i class="fas fa-phone me-2"></i><span id="contact-phone-text">+63 968 581 6796</span></a>
+            <a href="#" target="_blank" class="contact-pill" id="contact-linkedin"><i class="fab fa-linkedin me-2"></i>LinkedIn</a>
+            <div class="small text-dim mt-2 px-2"><i class="fas fa-map-marker-alt me-2"></i><span id="contact-location-text">Philippines</span></div>
+            <div class="small text-accent mt-2 px-2"><i class="fas fa-house-user me-2"></i><span id="contact-wfh-text">Open to Permanent WFH</span></div>
         </div>
 
         <span class="section-title">Documents</span>
-        <div class="mb-4">
-            <a href="Resume - Christopher Lee Cajes.pdf" download class="contact-pill text-center fw-bold" style="background: var(--accent); color: #fff; border: none;">
+        <div class="mb-3">
+            <a id="downloadResumeBtn" href="Resume - Christopher Lee Cajes.pdf" download class="contact-pill text-center fw-bold" style="background:var(--accent);color:#fff;border:none;">
                 <i class="fas fa-file-pdf me-2"></i>Download Resume (PDF)
             </a>
         </div>
         <div class="mb-4">
-            <a href="Cover Letter - Christopher Lee Cajes.pdf" download class="contact-pill text-center fw-bold" style="background: var(--accent); color: #fff; border: none;">
+            <a id="downloadCoverLetterBtn" href="Cover Letter - Christopher Lee Cajes.pdf" download class="contact-pill text-center fw-bold" style="background:var(--accent);color:#fff;border:none;">
                 <i class="fas fa-file-pdf me-2"></i>Download Cover Letter (PDF)
             </a>
         </div>
     </aside>
 
     <main id="content">
-        <section id="summary" class="section-box">
+        <section id="summary-section" class="section-box">
             <span class="section-title">Professional Summary</span>
-            <p class="mb-0">
-                Senior Software Developer with 8+ years of professional experience specializing in C#, ASP.NET Core (Web & API), WinForms, and SQL Server-based systems. Strong background in building enterprise and financial applications, developing secure REST APIs, and supporting business-critical systems. Proven ability to work effectively in structured teams and remote environments, with a focus on code quality, system stability, and positive work culture.
-            </p>
+            <p class="mb-0" id="summary-content">Loading...</p>
         </section>
 
-        <section id="stack" class="section-box">
+        <section id="stack-section" class="section-box">
             <span class="section-title">Core Technical Skills</span>
             <div class="row g-3">
                 <div class="col-md-6">
-                    <h6 class="fw-bold small mb-2 text-accent">Primary Stack & Backend</h6>
-                    <div class="mb-3">
-                        <span class="skill-badge">C#</span>
-                        <span class="skill-badge">ASP.NET Core (Web & API)</span>
-                        <span class="skill-badge">ASP.NET MVC / .NET Framework</span>
-                        <span class="skill-badge">WinForms (Desktop)</span>
-                        <span class="skill-badge">PHP Laravel</span>
-                        <span class="skill-badge">Python</span>
-                        <span class="skill-badge">Django</span>
-                        <span class="skill-badge">Ruby</span>
-                        <span class="skill-badge">Ruby on Rails</span>
-                        <span class="skill-badge">C++</span>
-                        <span class="skill-badge">TypeScript</span>
-                        <span class="skill-badge">Java Spring Boot</span>
-                        <span class="skill-badge">Java & GUI Development</span>
-                        <span class="skill-badge">Node.js</span>
-                        <span class="skill-badge">RESTful API Design</span>
-                        <span class="skill-badge">Entity Framework</span>
-                        <span class="skill-badge">Class Library Development</span>
-                        <span class="skill-badge">Console Applications</span>
-                    </div>
+                    <h6 class="fw-bold small mb-2 text-accent">Primary Stack &amp; Backend</h6>
+                    <div id="skills-primaryStack" class="mb-3"></div>
                 </div>
                 <div class="col-md-6">
-                    <h6 class="fw-bold small mb-2 text-accent">Databases & Infrastructure</h6>
-                    <div class="mb-3">
-                        <span class="skill-badge">SQL Server</span>
-                        <span class="skill-badge">MySQL</span>
-                        <span class="skill-badge">PostgreSQL</span>
-                        <span class="skill-badge">Oracle DB</span>
-                        <span class="skill-badge">SQLite</span>
-                        <span class="skill-badge">Git / Source Control</span>
-                        <span class="skill-badge">Visual Studio / VS Code</span>
-                        <span class="skill-badge">Postman</span>
-                        <span class="skill-badge">Blue Prism (RPA)</span>
-                        <span class="skill-badge">Xcode (Swift)</span>
-                    </div>
+                    <h6 class="fw-bold small mb-2 text-accent">Databases &amp; Infrastructure</h6>
+                    <div id="skills-databases" class="mb-3"></div>
                 </div>
                 <div class="col-md-6">
-                    <h6 class="fw-bold small mb-2 text-accent">Frontend & Mobile</h6>
-                    <div class="mb-3">
-                        <span class="skill-badge">HTML / CSS</span>
-                        <span class="skill-badge">Bootstrap</span>
-                        <span class="skill-badge">Tailwind CSS</span>
-                        <span class="skill-badge">JavaScript / jQuery</span>
-                        <span class="skill-badge">TypeScript</span>
-                        <span class="skill-badge">Vue.js</span>
-                        <span class="skill-badge">AngularJS</span>
-                        <span class="skill-badge">React JS (Working Knowledge)</span>
-                        <span class="skill-badge">Node.js</span>
-                        <span class="skill-badge">Android Studio (Java)</span>
-                        <span class="skill-badge">Mobile UI/UX Implementation</span>
-                        <span class="skill-badge">REST API Integration</span>
-                    </div>
+                    <h6 class="fw-bold small mb-2 text-accent">Frontend &amp; Mobile</h6>
+                    <div id="skills-frontend" class="mb-3"></div>
                 </div>
                 <div class="col-md-6">
-                    <h6 class="fw-bold small mb-2 text-accent">Multimedia & Creative</h6>
-                    <div class="mb-3">
-                        <span class="skill-badge">Unity 3D</span>
-                        <span class="skill-badge">Unreal Engine</span>
-                        <span class="skill-badge">Autodesk Maya</span>
-                        <span class="skill-badge">Blender</span>
-                        <span class="skill-badge">Adobe Photoshop</span>
-                    </div>
+                    <h6 class="fw-bold small mb-2 text-accent">Multimedia &amp; Creative</h6>
+                    <div id="skills-multimedia" class="mb-3"></div>
                 </div>
             </div>
         </section>
 
-        <section id="experience" class="section-box">
+        <section id="experience-section" class="section-box">
             <span class="section-title">Professional Experience</span>
-            
-            <div class="exp-item">
-                <div class="d-flex justify-content-between flex-wrap">
-                    <h6 class="fw-bold mb-0">Systems Analyst II | Rizal Commercial Banking Corporation (RCBC)</h6>
-                    <span class="small text-accent">Nov 2025 – Feb 2026</span>
-                </div>
-                <p class="small text-dim mb-2">Taguig City</p>
-                <ul class="small">
-                    <li>Developed and maintained ASP.NET Core Web applications supporting internal banking systems.</li>
-                    <li>Built and enhanced C# console applications for internal automation and system support.</li>
-                    <li>Collaborated with analysts and developers to ensure system reliability and compliance.</li>
-                </ul>
-            </div>
-
-            <div class="exp-item">
-                <div class="d-flex justify-content-between flex-wrap">
-                    <h6 class="fw-bold mb-0">Programmer / Analyst | Vertere Global Solutions Inc.</h6>
-                    <span class="small text-accent">Apr 2025 – Oct 2025</span>
-                </div>
-                <p class="small text-dim mb-2">Taguig City</p>
-                <ul class="small">
-                    <li>Developed ASP.NET Core Web applications and APIs for business clients.</li>
-                    <li>Participated in system analysis, implementation, and support of production applications.</li>
-                    <li>Ensured clean code practices and proper data handling using SQL Server.</li>
-                </ul>
-            </div>
-
-            <div class="exp-item">
-                <div class="d-flex justify-content-between flex-wrap">
-                    <h6 class="fw-bold mb-0">Full Stack Web Developer | Quantrics Enterprises Inc.</h6>
-                    <span class="small text-accent">Nov 2023 – Feb 2025</span>
-                </div>
-                <p class="small text-dim mb-2">Taytay, Rizal</p>
-                <ul class="small">
-                    <li>Developed web applications using ASP.NET Core API and React JS.</li>
-                    <li>Implemented REST APIs consumed by frontend applications.</li>
-                </ul>
-            </div>
-
-            <div class="exp-item">
-                <div class="d-flex justify-content-between flex-wrap">
-                    <h6 class="fw-bold mb-0">Web Developer | Quantrics Enterprises Inc.</h6>
-                    <span class="small text-accent">Dec 2021 – Oct 2023</span>
-                </div>
-                <p class="small text-dim mb-2">Taytay, Rizal</p>
-                <ul class="small">
-                    <li>Designed and developed responsive websites using HTML, CSS, Bootstrap, JavaScript, and jQuery.</li>
-                    <li>Maintained and enhanced existing systems based on business requirements.</li>
-                </ul>
-            </div>
-
-            <div class="exp-item">
-                <div class="d-flex justify-content-between flex-wrap">
-                    <h6 class="fw-bold mb-0">Application Developer | Quantrics Enterprises Inc.</h6>
-                    <span class="small text-accent">Nov 2018 – Nov 2021</span>
-                </div>
-                <p class="small text-dim mb-2">Taytay, Rizal</p>
-                <ul class="small">
-                    <li>Developed ASP.NET Core APIs to support automation and internal tools.</li>
-                    <li>Implemented Robotic Process Automation (RPA) solutions using Blue Prism.</li>
-                    <li>Integrated APIs with business processes to improve operational efficiency.</li>
-                </ul>
-            </div>
-
-            <div class="exp-item">
-                <div class="d-flex justify-content-between flex-wrap">
-                    <h6 class="fw-bold mb-0">Software Developer | Capital Power Global, Ltd.</h6>
-                    <span class="small text-accent">May 2017 – Aug 2018</span>
-                </div>
-                <p class="small text-dim mb-2">Makati City</p>
-                <ul class="small">
-                    <li>Developed ASP.NET (Framework & Core) Web Applications and Web APIs.</li>
-                    <li>Created C# Class Libraries to support modular and reusable codebases.</li>
-                    <li>Designed and managed databases using SQL Server.</li>
-                </ul>
-            </div>
+            <div id="experience-list"></div>
         </section>
 
-        <section id="projects" class="section-box">
-            <span class="section-title">Deployed Projects & Portfolio</span>
-            <div class="row g-4">
-                <div class="col-md-6">
-                    <h6 class="fw-bold mb-1">La-Fierce - Social Media Mobile App</h6>
-                    <p class="small text-dim mb-2">Created a full-featured social media application using Android Studio. Developed a robust backend using C# API and SQL Server for data management.</p>
-                    <a href="https://chris654cajes.github.io/lafierce.github.io/" target="_blank" class="text-accent small text-decoration-none">App Introduction (Website) <i class="fas fa-external-link-alt ms-1"></i></a>
-                </div>
-                <div class="col-md-6">
-                    <h6 class="fw-bold mb-1">La-Fierce - Admin</h6>
-                    <p class="small text-dim mb-2">Created a separate administrative interface for managing the La-Fierce famous successful people.</p>
-                    <p>Platform: Windows Forms C#, Android & Website</p>
-                    <p class="small text-dim mb-0">Technologies: Windows Forms C#, Android Studio, React JS</p>
-                </div>
-                <div class="col-md-6">
-                    <h6 class="fw-bold mb-1">SariKart - Online Grocery Shopping Mobile App</h6>
-                    <p class="small text-dim">Mobile application developed using Android Studio (Java). Backend powered by ASP.NET Web API for product and order management.</p>
-                </div>
-                <div class="col-md-6">
-                    <h6 class="fw-bold mb-1">Student Enrollment System - Minds That Matter Learning Center</h6>
-                    <p class="small text-dim">Desktop application developed using VB.NET / WinForms. Implemented student records management and enrollment workflows.</p>
-                </div>
-                <div class="col-md-6">
-                    <h6 class="fw-bold mb-1">Other Android Applications</h6>
-                    <p class="small text-dim mb-2">There are more Android applications developed.</p>
-                    <p class="small text-dim mb-0">Technologies: Android Studio</p>
-                </div>
-                <div class="col-md-6">
-                    <h6 class="fw-bold mb-1">My Created Applications Portfolio Website</h6>
-                    <a href="http://www.my-creative-apps.somee.com/" target="_blank" class="text-accent small text-decoration-none">Website <i class="fas fa-external-link-alt ms-1"></i></a>
-                </div>
-            </div>
+        <section id="projects-section" class="section-box">
+            <span class="section-title">Deployed Projects &amp; Portfolio</span>
+            <div class="row g-4" id="projects-list"></div>
         </section>
 
         <div class="row g-4">
             <div class="col-lg-6">
-                <section id="education" class="section-box h-100">
+                <section id="education-section" class="section-box h-100">
                     <span class="section-title">Education</span>
-                    <div class="mb-3">
-                        <h6 class="fw-bold mb-1">Master of Information Technology (Systems Development)</h6>
-                        <p class="small text-accent mb-0">Ateneo de Naga University | March 2017</p>
-                    </div>
-                    <div>
-                        <h6 class="fw-bold mb-1">Bachelor of Science in Information Technology</h6>
-                        <p class="small text-accent mb-0">Ateneo de Naga University | March 2015</p>
-                    </div>
+                    <div id="education-list"></div>
                 </section>
             </div>
             <div class="col-lg-6">
-                <section id="strengths" class="section-box h-100">
-                    <span class="section-title">Strengths & Preferences</span>
-                    <p class="small text-dim mb-0">
-                        <strong>Strengths:</strong> Fast learner, highly adaptable, creative problem-solver, self-motivated, wellness-conscious, and open to feedback.<br><br>
-                        <strong>Work Preferences:</strong> Permanent Work from Home, Philippines-based or offshore remote roles, emphasis on work-life balance and positive team culture.
-                    </p>
+                <section id="strengths-section" class="section-box h-100">
+                    <span class="section-title">Strengths &amp; Preferences</span>
+                    <p class="small text-dim mb-0" id="strengths-content"></p>
                 </section>
             </div>
         </div>
     </main>
 
-    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="app.js"></script>
     <script src="edit-functionality.js"></script>
-    <script>
-        function setTheme(el, hex, rgb) {
-            document.documentElement.style.setProperty('--accent', hex);
-            document.documentElement.style.setProperty('--accent-rgb', rgb);
-            document.querySelectorAll('.theme-dot').forEach(dot => dot.classList.remove('active'));
-            el.classList.add('active');
-        }
-
-        function toggleLightMode(mode) {
-            document.body.setAttribute('data-theme', mode);
-        }
-        
-        document.documentElement.style.setProperty('--accent-rgb', '56, 189, 248');
-    </script>
 </body>
 </html>
